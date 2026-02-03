@@ -1,4 +1,4 @@
-<meta name='viewport' content='width=device-width, initial-scale=1'/><script>const CACHE_NAME = "xamepage-v2.1-PROD";
+const CACHE_NAME = "xamepage-v2.1-PROD";
 
 const ASSETS = [
   "./",
@@ -63,4 +63,4 @@ self.addEventListener("fetch", event => {
       });
     })
   );
-});</script>
+});
