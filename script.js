@@ -1,4 +1,4 @@
-<meta name='viewport' content='width=device-width, initial-scale=1'/>/*
+/*
 // PART 1: Header and Core Setup with Security & Performance Fixes
 */
 
@@ -12526,4 +12526,3 @@ console.log('📦 Active resources:', window.__XAME_DEBUG__.getResourceCount());
 /*
 // END OF OPTIMIZED XAMEPAGE v2.1
 */
-</script>
