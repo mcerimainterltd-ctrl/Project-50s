@@ -1,4 +1,3 @@
-<meta name='viewport' content='width=device-width, initial-scale=1'/><script>//
 // XamePage v2.1 Server File
 //
 // This server has been rebuilt for production-grade reliability and scalability.
@@ -1169,5 +1168,3 @@ server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
     console.log(`Access the app at http://localhost:${PORT}`);
 });
-
-</script>
