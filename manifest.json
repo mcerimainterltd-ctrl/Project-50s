@@ -1,89 +1,28 @@
-<meta name='viewport' content='width=device-width, initial-scale=1'/><script>
-/*
-// PART 1: Header and Core Setup
-*/
+{
+  "name": "XamePage v2.1",
+  "short_name": "XamePage",
+  "description": "A modern communication and management platform.",
+  "start_url": "index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#FFD700",
+  "orientation": "portrait",
 
-//
-// XamePage v2.1 Script File - Updated with Robust File Upload & Waveform Visualization
-//
-
-// --- Dynamic Server URL based on environment ---
-let socket = null;
-
-let serverURL;
-
-// This logic automatically uses the correct URL.
-// It detects if you're using a Cloudflare tunnel or a local network connection.
-const currentHostname = window.location.hostname;
-const currentPort = window.location.port;
-
-if (currentHostname.includes('trycloudflare.com')) {
-    serverURL = `https://${currentHostname}`;
-    console.log("Using Cloudflare URL:", serverURL);
-} else if (currentHostname === 'localhost' || currentHostname === '127.0.0.1') {
-    serverURL = `http://localhost:${currentPort}`;
-    console.log("Using Localhost URL:", serverURL);
-} else {
-    // This will handle your private IP like 10.28.130.157
-    serverURL = `http://${currentHostname}:${currentPort}`;
-    console.log("Using Network IP URL:", serverURL);
-}
-
-// ===== Storage helpers =====
-const storage = {
-  get(key, fallback = null) {
-    try {
-      const v = localStorage.getItem(key);
-      return v ? JSON.parse(v) : fallback;
-    } catch {
-      return fallback;
+  "icons": [
+    { "src": "assets/icons/icon-48.png", "sizes": "48x48", "type": "image/png" },
+    { "src": "assets/icons/icon-72.png", "sizes": "72x72", "type": "image/png" },
+    { "src": "assets/icons/icon-96.png", "sizes": "96x96", "type": "image/png" },
+    { "src": "assets/icons/icon-144.png", "sizes": "144x144", "type": "image/png" },
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
-  },
-  set(key, value) {
-    localStorage.setItem(key, JSON.stringify(value));
-  },
-  del(key) {
-    localStorage.removeItem(key);
-  }
-};
-
-const KEYS = {
-  user: 'xame:user',
-  contacts: 'xame:contacts',
-  chat: (id) => `xame:chat:${id}`,
-  drafts: 'xame:drafts',
-  settings: 'xame:settings',
-  version: '2.1'
-};
-const APP_VERSION = '2.1';
-
-// ===== File Upload Configuration =====
-const FILE_CONFIG = {
-  maxSize: 500 * 1024 * 1024, // 500MB
-  allowedTypes: {
-    images: ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'],
-    videos: ['video/mp4', 'video/webm', 'video/ogg'],
-    audio: ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm'],
-    documents: [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/vnd.ms-powerpoint',
-      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      'text/plain',
-      'text/javascript',
-      'application/javascript',
-      'application/x-javascript',
-      'text/css',
-      'text/html'
-    ]
-  }
-};
-
-// ===== Utilities =====
-const $ = (sel, root = document) => root.querySelector(sel);
+  ]
+}const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 const uid = () => Math.random().toString(36).slice(2, 10);
 const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -4063,4 +4002,3 @@ window.__XAME__ = {
   setChat,
   USER
 };
-</script>
