@@ -1170,13 +1170,14 @@ io.on('connection', (socket) => {
     
 });
 
-// --- Example Express route ---
-app.get('/', (req, res) => {
-    res.send('Server is live!');
+// --- Serve all frontend files from root ---
+app.use(express.static(__dirname));
+
+// --- Catch-all route for SPA / PWA ---
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // --- Start server ---
 const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
