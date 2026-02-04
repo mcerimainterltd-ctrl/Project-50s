@@ -23,12 +23,14 @@ const currentPort = window.location.port;
 if (currentHostname.includes('trycloudflare.com')) {
     serverURL = `https://${currentHostname}`;
     console.log("Using Cloudflare URL:", serverURL);
+
 } else if (currentHostname === 'localhost' || currentHostname === '127.0.0.1') {
-    serverURL = `http://localhost:${currentPort || 8080}`; // use port 8080 if not defined
+    serverURL = `http://localhost:${currentPort || 8080}`;
     console.log("Using Localhost URL:", serverURL);
+
 } else {
     // For production (Render or any live URL)
-    serverURL = `https://${currentHostname}`;  // always HTTPS
+    serverURL = `https://${currentHostname}`;
     console.log("Using Production URL:", serverURL);
 }
 
