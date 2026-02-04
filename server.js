@@ -24,6 +24,9 @@ const cors = require('cors');
 const { body, validationResult } = require('express-validator');
 
 // --- Server setup ---
+require('dotenv').config();
+const mongoose = require('mongoose');
+const express = require('express');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -33,19 +36,24 @@ const io = new Server(server, {
     }
 });
 
-// --- MongoDB Configuration ---
-require('dotenv').config();
+// Optional: JSON middleware
+app.use(express.json());
 
-// We will use the cloud URI for production-grade persistence
+// --- MongoDB Configuration ---
 const MONGODB_URI = process.env.MONGODB_CLOUD_URI;
 
+// Check if the URI exists
 if (!MONGODB_URI) {
-    console.error('❌ MONGODB_CLOUD_URI is not defined in the environment variables.');
+    console.error('❌ ERROR: MONGODB_CLOUD_URI is not defined in environment variables.');
     process.exit(1);
 }
 
+// Optional: log the first 10 chars to confirm it's loaded (never log full password in prod)
+console.log('✅ Mongo URI loaded:', MONGODB_URI.slice(0, 10) + '...');
+
+// Connect to MongoDB
 mongoose.connect(MONGODB_URI)
-    .then(() => console.log('✅ MongoDB connected'))
+    .then(() => console.log('✅ MongoDB connected successfully'))
     .catch(err => {
         console.error('❌ MongoDB connection error:', err);
         process.exit(1);
@@ -1163,8 +1171,13 @@ io.on('connection', (socket) => {
     
 });
 
+// --- Example Express route ---
+app.get('/', (req, res) => {
+    res.send('Server is live!');
+});
+
+// --- Start server ---
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
-    console.log(`Access the app at http://localhost:${PORT}`);
 });
