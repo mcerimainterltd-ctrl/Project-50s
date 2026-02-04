@@ -26,7 +26,6 @@ const { body, validationResult } = require('express-validator');
 require('dotenv').config();
 
 // --- Server setup ---
-const express = require('express');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
