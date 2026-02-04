@@ -15,7 +15,6 @@ window.addEventListener('error', (e) => {
 
 // --- Dynamic Server URL based on environment ---
 let socket = null;
-
 let serverURL;
 
 const currentHostname = window.location.hostname;
@@ -25,11 +24,12 @@ if (currentHostname.includes('trycloudflare.com')) {
     serverURL = `https://${currentHostname}`;
     console.log("Using Cloudflare URL:", serverURL);
 } else if (currentHostname === 'localhost' || currentHostname === '127.0.0.1') {
-    serverURL = `http://localhost:${currentPort}`;
+    serverURL = `http://localhost:${currentPort || 8080}`; // use port 8080 if not defined
     console.log("Using Localhost URL:", serverURL);
 } else {
-    serverURL = `http://${currentHostname}:${currentPort}`;
-    console.log("Using Network IP URL:", serverURL);
+    // For production (Render or any live URL)
+    serverURL = `https://${currentHostname}`;  // always HTTPS
+    console.log("Using Production URL:", serverURL);
 }
 
 // ===== DUAL STORAGE: In-Memory + LocalStorage Fallback =====
