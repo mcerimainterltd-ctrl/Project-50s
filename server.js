@@ -10,7 +10,8 @@
 // - **NEW:** Implements server-side privacy filtering for profile data and caller identity.
 // - **UPDATE:** Comprehensive API endpoint for permanent chat and contact deletion.
 // - **FIXED:** Implements real-time message deletion logic.
-//
+
+//======================
 const express = require('express');
 const http = require('http');
 const { Server } = require("socket.io");
@@ -22,10 +23,9 @@ const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
 const cors = require('cors'); 
 const { body, validationResult } = require('express-validator');
+require('dotenv').config();
 
 // --- Server setup ---
-require('dotenv').config();
-const mongoose = require('mongoose');
 const express = require('express');
 const app = express();
 const server = http.createServer(app);
