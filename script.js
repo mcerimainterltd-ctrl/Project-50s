@@ -4681,15 +4681,16 @@ function connectSocket() {
     
     console.log('Creating new socket connection...');
     socket = io(serverURL, {
-        query: { userId: USER.xameId },
-        reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        randomizationFactor: 0.5,
-        timeout: 10000,
-        transports: ['websocket', 'polling']
-    });
+    query: { userId: USER.xameId },
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    randomizationFactor: 0.5,
+    timeout: 10000,
+    transports: ['websocket', 'polling'],
+    path: '/socket.io/'  // Add this line
+});
 
     socket.on('connect', () => {
         console.log('✅ Connected to server!');
