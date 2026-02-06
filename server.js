@@ -1,5 +1,4 @@
-
-// XamePage v2.1 Server File
+// XamePage v2.1 Server File - OPTIMIZED FOR RENDER
 
 const express = require('express');
 const http = require('http');
@@ -34,6 +33,12 @@ const io = new Server(server, {
 // Middleware
 app.use(express.json());
 app.use(cors());
+
+// For Render/Heroku compatibility
+if (process.env.NODE_ENV === 'production') {
+    app.set('trust proxy', 1);
+    console.log('🌍 Running in production mode');
+}
 
 // ============================================================
 // MONGODB CONFIGURATION
@@ -113,24 +118,44 @@ const Message = mongoose.model('Message', messageSchema);
 const CallHistory = mongoose.model('CallHistory', callHistorySchema);
 
 // ============================================================
-// FILE UPLOAD CONFIGURATION
+// FILE UPLOAD CONFIGURATION (CLOUD COMPATIBLE)
 // ============================================================
 
-const upload = multer({ dest: 'uploads/' });
+// Use /tmp directory for cloud environments
+const uploadBaseDir = process.env.NODE_ENV === 'production' ? '/tmp' : __dirname;
+const uploadDir = path.join(uploadBaseDir, 'uploads');
+const profilePicsDir = path.join(uploadBaseDir, 'media', 'profile_pics');
 
-// Create necessary directories
-const uploadDir = path.join(__dirname, 'uploads');
-const profilePicsDir = path.join(__dirname, 'media', 'profile_pics');
-
+// Create directories if they don't exist
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
-    console.log('✅ Created uploads directory');
+    console.log('✅ Created uploads directory:', uploadDir);
 }
 
 if (!fs.existsSync(profilePicsDir)) {
     fs.mkdirSync(profilePicsDir, { recursive: true });
-    console.log('✅ Created profile pics directory');
+    console.log('✅ Created profile pics directory:', profilePicsDir);
 }
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        if (file.fieldname === 'profilePic') {
+            cb(null, profilePicsDir);
+        } else {
+            cb(null, uploadDir);
+        }
+    },
+    filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
+    }
+});
+
+const upload = multer({ 
+    storage: storage,
+    limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
 
 // Serve static files
 app.use(express.static(__dirname));
@@ -324,6 +349,15 @@ async function getFullContactData(userId) {
 // API ENDPOINTS
 // ============================================================
 
+// Health check endpoint (required by Render)
+app.get('/health', (req, res) => {
+    res.status(200).json({ 
+        status: 'OK', 
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+    });
+});
+
 // Registration
 app.post('/api/register',
     body('firstName').trim().escape().notEmpty().withMessage('First name is required.'),
@@ -420,13 +454,8 @@ app.post('/api/upload-file', upload.single('file'), async (req, res) => {
     }
 
     try {
-        const fileExt = path.extname(req.file.originalname);
-        const newFilename = `${uuidv4()}${fileExt}`;
-        const newPath = path.join(uploadDir, newFilename);
-
-        await fsPromises.rename(req.file.path, newPath);
-
-        const fileUrl = `/uploads/${newFilename}`;
+        const fileUrl = `/uploads/${req.file.filename}`;
+        console.log(`✅ File uploaded: ${req.file.originalname} -> ${fileUrl}`);
         res.json({ success: true, url: fileUrl });
     } catch (error) {
         console.error('File processing failed:', error);
@@ -437,6 +466,14 @@ app.post('/api/upload-file', upload.single('file'), async (req, res) => {
 // Update profile
 app.post('/api/update-profile', upload.single('profilePic'), async (req, res) => {
     const { userId, preferredName, removeProfilePic, hidePreferredName, hideProfilePicture } = req.body;
+
+    console.log(`🔍 Updating profile for user: ${userId}`, {
+        preferredName,
+        removeProfilePic,
+        hidePreferredName,
+        hideProfilePicture,
+        hasFile: !!req.file
+    });
 
     try {
         const user = await User.findOne({ xameId: userId });
@@ -466,19 +503,20 @@ app.post('/api/update-profile', upload.single('profilePic'), async (req, res) =>
             user.profilePic = '';
             console.log(`✅ Profile picture removed for user: ${userId}`);
         } else if (req.file) {
-            const oldProfilePic = user.profilePic ? path.join(__dirname, user.profilePic) : null;
+            // Delete old profile picture if exists
+            if (user.profilePic && user.profilePic.startsWith('/media/profile_pics/')) {
+                const oldPath = path.join(profilePicsDir, path.basename(user.profilePic));
+                await fsPromises.unlink(oldPath).catch(err => console.error('Failed to delete old profile pic:', err));
+            }
 
+            // Save new profile picture
             const fileExt = path.extname(req.file.originalname);
             const newFilename = `${userId}${fileExt}`;
             const newPath = path.join(profilePicsDir, newFilename);
 
             await fsPromises.rename(req.file.path, newPath);
             user.profilePic = `/media/profile_pics/${newFilename}`;
-            console.log(`✅ Profile picture updated for user: ${userId}`);
-
-            if (oldProfilePic) {
-                await fsPromises.unlink(oldProfilePic).catch(err => console.error('Failed to delete old profile pic:', err));
-            }
+            console.log(`✅ Profile picture updated for user: ${userId} at ${user.profilePic}`);
         }
 
         await user.save();
@@ -1025,19 +1063,55 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// Catch-all for SPA
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 // ============================================================
-// START SERVER
+// START SERVER (RENDER COMPATIBLE)
 // ============================================================
 
 const PORT = process.env.PORT || 8080;
+const HOST = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
 
-server.listen(PORT, () => {
+// Add error handling for server startup
+server.listen(PORT, HOST, () => {
     console.log('='.repeat(60));
     console.log('✅ XamePage Server v2.1 Started Successfully');
     console.log('='.repeat(60));
-    console.log(`📡 Server running on port: ${PORT}`);
-    console.log(`🌐 Local access: http://localhost:${PORT}`);
-    console.log(`📁 Serving files from: ${__dirname}`);
-    console.log(`🗄️  MongoDB: ${MONGODB_URI ? 'Connected' : 'Not configured'}`);
+    console.log(`📡 Server running on: ${HOST}:${PORT}`);
+    console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`📁 Serving from: ${__dirname}`);
+    console.log(`🗄️  MongoDB: Connected`);
     console.log('='.repeat(60));
+}).on('error', (err) => {
+    console.error('❌ Server failed to start:', err.message);
+    if (err.code === 'EADDRINUSE') {
+        console.error(`Port ${PORT} is already in use.`);
+    }
+    process.exit(1);
+});
+
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+    console.log('🔄 SIGTERM received. Shutting down gracefully...');
+    server.close(() => {
+        console.log('✅ Server closed');
+        mongoose.connection.close(false, () => {
+            console.log('✅ MongoDB connection closed');
+            process.exit(0);
+        });
+    });
+});
+
+process.on('SIGINT', () => {
+    console.log('🔄 SIGINT received. Shutting down gracefully...');
+    server.close(() => {
+        console.log('✅ Server closed');
+        mongoose.connection.close(false, () => {
+            console.log('✅ MongoDB connection closed');
+            process.exit(0);
+        });
+    });
 });
