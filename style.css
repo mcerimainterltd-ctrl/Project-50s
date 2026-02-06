@@ -2838,3 +2838,42 @@ html, body {
     transform: none;
   }
 }
+
+.message {
+  position: relative;
+}
+
+.message.pending {
+  opacity: 0.7;
+}
+
+.message.failed {
+  opacity: 0.5;
+}
+
+.message .status-icon {
+  font-size: 12px;
+  margin-left: 6px;
+  opacity: 0.7;
+}
+
+.retry-icon {
+  display: inline-block;
+  animation: spin 1.2s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.message.pending .bubble {
+  background: #dcdcdc !important;
+  color: #555;
+}
+
+.message.failed {
+  border: 1px dashed red;
+  cursor: pointer;
+}
+
