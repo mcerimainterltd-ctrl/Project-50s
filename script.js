@@ -15,7 +15,6 @@ window.addEventListener('error', (e) => {
 
 // --- Dynamic Server URL based on environment ---
 let socket = null;
-
 let serverURL;
 
 const currentHostname = window.location.hostname;
@@ -24,12 +23,15 @@ const currentPort = window.location.port;
 if (currentHostname.includes('trycloudflare.com')) {
     serverURL = `https://${currentHostname}`;
     console.log("Using Cloudflare URL:", serverURL);
+
 } else if (currentHostname === 'localhost' || currentHostname === '127.0.0.1') {
-    serverURL = `http://localhost:${currentPort}`;
+    serverURL = `http://localhost:${currentPort || 8080}`;
     console.log("Using Localhost URL:", serverURL);
+
 } else {
-    serverURL = `http://${currentHostname}:${currentPort}`;
-    console.log("Using Network IP URL:", serverURL);
+    // For production (Render or any live URL)
+    serverURL = `https://${currentHostname}`;
+    console.log("Using Production URL:", serverURL);
 }
 
 // ===== DUAL STORAGE: In-Memory + LocalStorage Fallback =====
@@ -255,54 +257,6 @@ const KEYS = {
   version: '2.1'
 };
 const APP_VERSION = '2.1';
-
-// =====================
-// 🔊 APP SOUND SYSTEM (CORDOVA SAFE)  — PART 1
-// =====================
-
-const APP_SOUNDS = {
-  incomingCall: new Audio('xamepage_call.mp3'),
-  outgoingCall: new Audio('xamepage_outgoing.mp3'),
-  message: new Audio('xamepage_message.mp3')
-};
-
-// Ensure sounds load properly in Cordova
-document.addEventListener('deviceready', () => {
-  console.log("Cordova ready — loading sounds");
-  Object.values(APP_SOUNDS).forEach(audio => {
-    audio.preload = "auto";
-    audio.load();
-  });
-});
-
-// Safe play helper (Android-friendly)
-function playSound(type, loop = false) {
-  try {
-    const audio = APP_SOUNDS[type];
-    if (!audio) return;
-
-    audio.currentTime = 0;
-    audio.loop = loop;
-
-    const playPromise = audio.play();
-    if (playPromise !== undefined) {
-      playPromise.catch(err => {
-        console.warn('Audio blocked on Android:', err);
-      });
-    }
-  } catch (e) {
-    console.error('Sound error:', e);
-  }
-}
-
-function stopSound(type) {
-  const audio = APP_SOUNDS[type];
-  if (!audio) return;
-
-  audio.pause();
-  audio.currentTime = 0;
-  audio.loop = false;
-}
 
 // ===== File Upload Configuration =====
 const FILE_CONFIG = {
@@ -612,196 +566,10 @@ const RESOURCES = {
 };
 
 /*
-// PART 2B: Socket Connection, App Bootstrap & Core Runtime
+// PART 3: Element References and Helper Functions
 */
 
-// =====================
-// 🌐 SOCKET + CONNECTION MANAGER
-// =====================
-
-let isConnected = false;
-let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 10;
-const RECONNECT_BASE_DELAY = 1500; // ms
-
-function connectSocket() {
-  if (socket && socket.connected) {
-    console.log('⚡ Socket already connected');
-    return;
-  }
-
-  try {
-    console.log('🔌 Connecting to socket:', serverURL);
-
-    socket = io(serverURL, {
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: MAX_RECONNECT_ATTEMPTS,
-      reconnectionDelay: RECONNECT_BASE_DELAY,
-      timeout: 20000
-    });
-
-    bindSocketEvents(socket);
-
-  } catch (err) {
-    console.error('❌ Socket initialization failed:', err);
-    scheduleReconnect();
-  }
-}
-
-function bindSocketEvents(sock) {
-
-  sock.on('connect', () => {
-    isConnected = true;
-    reconnectAttempts = 0;
-    console.log('🟢 Socket connected:', sock.id);
-    showNotification(`Connected as: ${sock.id}`);
-
-    // Identify user to server if available
-    const user = storage.get(KEYS.user, null);
-    if (user && user.xameId) {
-      sock.emit('register', { xameId: user.xameId });
-    }
-  });
-
-  sock.on('disconnect', (reason) => {
-    isConnected = false;
-    console.warn('🟡 Socket disconnected:', reason);
-    showNotification('Disconnected. Reconnecting...');
-    scheduleReconnect();
-  });
-
-  sock.on('connect_error', (err) => {
-    console.error('🔴 Socket connect error:', err);
-    scheduleReconnect();
-  });
-
-  // === CORE REALTIME EVENTS ===
-
-  sock.on('incoming-message', (msg) => {
-    try {
-      handleIncomingMessage(msg);
-      notifyWithFeedback('New message', { sound: 'message', vibrate: true });
-    } catch (e) {
-      console.error('Error handling incoming message:', e);
-    }
-  });
-
-  sock.on('contact-updated', (payload) => {
-    try {
-      if (!payload || !payload.contact) return;
-
-      const idx = CONTACTS.findIndex(c => c.id === payload.contact.id);
-      if (idx !== -1) {
-        CONTACTS[idx] = { ...CONTACTS[idx], ...payload.contact };
-        storage.set(KEYS.contacts, CONTACTS);
-        debouncedRenderContacts(searchInput?.value || '');
-      }
-    } catch (e) {
-      console.error('Error processing contact update:', e);
-    }
-  });
-
-  sock.on('chat-deleted', ({ contactId }) => {
-    try {
-      if (contactId) {
-        delete CHAT_HISTORY[contactId];
-        storage.set(KEYS.chat(contactId), []);
-        if (ACTIVE_ID === contactId) {
-          renderMessages();
-        }
-        showNotification('Chat history cleared by server.');
-      }
-    } catch (e) {
-      console.error('Error handling chat-deleted:', e);
-    }
-  });
-
-  sock.on('call-signal', (signal) => {
-    try {
-      handleCallSignal(signal);
-    } catch (e) {
-      console.error('Error handling call signal:', e);
-    }
-  });
-}
-
-// =====================
-// 🔁 RECONNECTION STRATEGY
-// =====================
-
-function scheduleReconnect() {
-  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-    showNotification('Connection failed. Tap to retry.');
-    console.error('❌ Max reconnection attempts reached.');
-    return;
-  }
-
-  const delay = Math.min(
-    RECONNECT_BASE_DELAY * Math.pow(1.5, reconnectAttempts),
-    15000
-  );
-
-  reconnectAttempts++;
-
-  console.log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
-
-  setTimeout(() => {
-    connectSocket();
-  }, delay);
-}
-
-// =====================
-// 🚀 APP BOOTSTRAP
-// =====================
-
-function bootstrapApp() {
-  console.log('🚀 Bootstrapping XamePage v' + APP_VERSION);
-
-  // 1) Load memory cache from persistent storage
-  initializeMemoryFromPersistent();
-
-  // 2) Ensure core globals exist
-  window.CONTACTS = storage.get(KEYS.contacts, []);
-  window.DRAFTS = storage.get(KEYS.drafts, {});
-  window.CHAT_HISTORY = window.CHAT_HISTORY || {};
-  window.RESOURCES = window.RESOURCES || { wavesurfers: new Map() };
-
-  // 3) Connect socket
-  connectSocket();
-
-  // 4) Render UI if available
-  if (typeof renderAppUI === 'function') {
-    renderAppUI();
-  }
-
-  // 5) Restore last open chat
-  const lastActive = persistentStorage.get('xame:lastActiveChat', null);
-  if (lastActive && typeof openChat === 'function') {
-    openChat(lastActive);
-  }
-}
-
-// =====================
-// 📱 CORDOVA + WEB READY
-// =====================
-
-document.addEventListener('DOMContentLoaded', bootstrapApp);
-
-document.addEventListener('deviceready', () => {
-  console.log('📱 Cordova device ready');
-  bootstrapApp();
-});
-
-/*
-// PART 3: Element References and Helper Functions (PATCHED — NULL-SAFE + CLEANED)
-*/
-
-// =====================
-// ===== Elements ======
-// =====================
-
-// Core screens
+// ===== Elements =====
 const elLanding = $('#landing');
 const elRegister = $('#register');
 const elLogin = $('#login');
@@ -810,13 +578,11 @@ const elChat = $('#chat');
 const elProfile = $('#profileSection');
 const elStatus = $('#statusSection');
 
-// Landing / Auth buttons
 const signUpBtn = $('#signUpBtn');
 const signInBtn = $('#signInBtn');
 const backToLandingBtn = $('#backToLandingBtn');
 const backToLandingBtn2 = $('#backToLandingBtn2');
 
-// Registration inputs
 const firstNameInput = $('#firstNameInput');
 const lastNameInput = $('#lastNameInput');
 
@@ -825,8 +591,7 @@ const dobMonthInput = $('#dobMonth');
 const dobYearInput = $('#dobYear');
 const dobHiddenDateInput = $('#dobHiddenDateInput');
 
-// DOB validation guard
-const dobErrorElement = $('#dobError');
+const dobErrorElement = $('#dobError'); 
 
 if (dobHiddenDateInput) {
   try {
@@ -835,12 +600,10 @@ if (dobHiddenDateInput) {
   } catch (_) {}
 }
 
-// Auth forms
 const registerForm = $('#registerForm');
 const loginForm = $('#loginForm');
 const loginXameIdInput = $('#loginXameIdInput');
 
-// Contacts UI
 const contactList = $('#contactList');
 const contactsCount = $('#contactsCount');
 const searchInput = $('#searchInput');
@@ -849,21 +612,15 @@ const addContactBtn = $('#addContactBtn');
 const moreBtn = $('#moreBtn');
 const moreMenu = $('#moreMenu');
 
-// Profile & header
 const avatarInitialsEl = document.getElementById('avatarInitials');
-const clearAllChatsBtn = $('#clearAllChatsBtn');
+const clearAllChatsBtn = $('#clearAllChatsBtn'); 
 const avatarBtn = document.getElementById('avatarBtn');
 const accountMenu = document.getElementById('accountMenu');
 
-// Chat header
 const elChatHeader = $('#chat .header');
 const elChatToolbar = $('#chat .header .toolbar');
 const elChatHeaderDetails = $('#chat .header .header-details');
 const elChatHeaderButtonGroup = $('#chat .header .icon-btn-group');
-
-// =====================
-// ===== Select Mode ===
-// =====================
 
 const selectToolbar = document.createElement('div');
 selectToolbar.className = 'select-toolbar hidden';
@@ -882,10 +639,6 @@ const deleteSelectedBtn = selectToolbar.querySelector('#deleteSelectedBtn');
 const copySelectedBtn = selectToolbar.querySelector('#copySelectedBtn');
 const forwardSelectedBtn = selectToolbar.querySelector('#forwardSelectedBtn');
 
-// =====================
-// ===== Chat Area =====
-// =====================
-
 const backBtn = $('#backBtn');
 const chatName = $('#chatName');
 const chatSub = $('#chatSub');
@@ -895,10 +648,6 @@ const composer = $('#composer');
 const messageInput = $('#messageInput');
 const sendBtn = $('#sendBtn');
 const layer = $('#layer');
-
-// =====================
-// ===== Profile =======
-// =====================
 
 const profileBackBtn = $('#profileBackBtn');
 const preferredNameInput = $('#preferredName');
@@ -910,27 +659,15 @@ const hideNameCheckbox = $('#hidePreferredNameSwitch');
 const hidePicCheckbox = $('#hideProfilePictureSwitch');
 const xameIdDisplay = $('#xameIdDisplay');
 
-// =====================
-// ===== Image Crop ====
-// =====================
-
 const cropModal = $('#cropModal');
 const cropImage = $('#cropImage');
 const cropCancelBtn = $('#cropCancelBtn');
 const cropSaveBtn = $('#cropSaveBtn');
 
-// =====================
-// ===== Status ========
-// =====================
-
 const statusItem = $('.status-item');
 const statusBackBtn = $('#statusBackBtn');
 const myStatusAvatarInitials = $('#myStatusAvatarInitials');
 const myStatusTime = $('#myStatusTime');
-
-// =====================
-// ===== File / Voice ==
-// =====================
 
 const fileInput = $('#fileInput');
 const attachBtn = $('#attachBtn');
@@ -941,36 +678,25 @@ const playBtn = $('#playBtn');
 const sendVoiceBtn = $('#sendVoiceBtn');
 const stopRecordBtn = $('#stopRecordBtn');
 
-let mediaRecorder = null;
+let mediaRecorder;
 let audioChunks = [];
 let audioBlob = null;
 let speechRecognizer = null;
 
-// ===============================
-// ===== Enhanced File Icons =====
-// ===============================
+// ===== Enhanced File Icon Function =====
 function getFileIcon(fileType, fileName = '') {
     if (fileType.startsWith('image/')) return '🖼️';
     else if (fileType.startsWith('video/')) return '📹';
     else if (fileType.startsWith('audio/')) return '🎵';
     else if (fileType === 'application/pdf') return '📄';
-    else if (fileType === 'application/msword' ||
-             fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
-        return '📝';
-    else if (fileType === 'application/vnd.ms-excel' ||
-             fileType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        return '📊';
-    else if (fileType === 'application/vnd.ms-powerpoint' ||
-             fileType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation')
-        return '📋';
+    else if (fileType === 'application/msword' || fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return '📝';
+    else if (fileType === 'application/vnd.ms-excel' || fileType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') return '📊';
+    else if (fileType === 'application/vnd.ms-powerpoint' || fileType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') return '📋';
     else if (fileType === 'text/plain') return '📜';
     else if (fileName.endsWith('.zip') || fileName.endsWith('.rar')) return '🗜️';
     return '📁';
 }
 
-// ===============================
-// ===== Time / Duration =========
-// ===============================
 function formatDuration(seconds) {
     if (!isFinite(seconds)) return '0:00';
     const mins = Math.floor(seconds / 60);
@@ -978,9 +704,6 @@ function formatDuration(seconds) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-// ===============================
-// ===== Fullscreen Image =========
-// ===============================
 function openImageFullscreen(imageUrl, imageName) {
     const overlay = document.createElement('div');
     overlay.className = 'fullscreen-image-overlay';
@@ -993,14 +716,14 @@ function openImageFullscreen(imageUrl, imageName) {
             </div>
         </div>
     `;
-
+    
     document.body.appendChild(overlay);
-
+    
     const closeBtn = overlay.querySelector('.close-fullscreen-btn');
     if (closeBtn) {
         closeBtn.addEventListener('click', () => overlay.remove());
     }
-
+    
     overlay.addEventListener('click', (e) => {
         if (e.target === overlay) {
             overlay.remove();
@@ -1008,15 +731,12 @@ function openImageFullscreen(imageUrl, imageName) {
     });
 }
 
-// ===============================
-// ===== Upload Progress UI =======
-// ===============================
 function createUploadProgress(msgId, fileName) {
     const existingProgress = document.getElementById(`upload-progress-${msgId}`);
     if (existingProgress) {
         existingProgress.remove();
     }
-
+    
     const progressDiv = document.createElement('div');
     progressDiv.id = `upload-progress-${msgId}`;
     progressDiv.className = 'upload-progress-indicator';
@@ -1030,20 +750,18 @@ function createUploadProgress(msgId, fileName) {
         </div>
         <button class="cancel-upload-btn" data-msg-id="${escapeHtml(msgId)}">Cancel</button>
     `;
-
-    if (composer) {
-        composer.insertAdjacentElement('beforebegin', progressDiv);
-    }
-
+    
+    composer.insertAdjacentElement('beforebegin', progressDiv);
+    
     const cancelBtn = progressDiv.querySelector('.cancel-upload-btn');
     if (cancelBtn) {
         cancelBtn.addEventListener('click', () => {
-            if (window.currentUpload) {
-                window.currentUpload.abort();
+            if (currentUpload) {
+                currentUpload.abort();
             }
         });
     }
-
+    
     return progressDiv;
 }
 
@@ -1052,7 +770,7 @@ function updateUploadProgress(msgId, percentage) {
     if (progressDiv) {
         const fill = progressDiv.querySelector('.upload-progress-fill');
         const percentageText = progressDiv.querySelector('.upload-percentage');
-
+        
         if (fill) {
             fill.style.width = `${percentage}%`;
         }
@@ -1072,10 +790,8 @@ function removeUploadProgress(msgId) {
 function handleUploadError(msgId, errorMessage) {
     showNotification(`Upload failed: ${errorMessage}`);
     console.error("File upload failed:", errorMessage);
-
+    
     const chatToUpdate = getChat(ACTIVE_ID);
-    if (!chatToUpdate) return;
-
     const msgIndex = chatToUpdate.findIndex(m => m.id === msgId);
     if (msgIndex !== -1) {
         chatToUpdate[msgIndex].text = 'Upload failed ⚠️';
@@ -1084,17 +800,13 @@ function handleUploadError(msgId, errorMessage) {
         setChat(ACTIVE_ID, chatToUpdate);
         renderMessages();
     }
-
+    
     removeUploadProgress(msgId);
 }
 
-// ===============================
-// ===== Image Send Preview =======
-// ===============================
 function showImagePreview(file) {
     return new Promise((resolve) => {
         const reader = new FileReader();
-
         reader.onload = (e) => {
             const overlay = document.createElement('div');
             overlay.className = 'image-preview-overlay';
@@ -1108,162 +820,30 @@ function showImagePreview(file) {
                     </div>
                 </div>
             `;
-
+            
             document.body.appendChild(overlay);
-
+            
             overlay.querySelector('#cancelImageSend').addEventListener('click', () => {
                 overlay.remove();
                 resolve(false);
             });
-
+            
             overlay.querySelector('#confirmImageSend').addEventListener('click', () => {
                 overlay.remove();
                 resolve(true);
             });
         };
-
         reader.onerror = () => {
             console.error('Failed to read image file');
             resolve(false);
         };
-
         reader.readAsDataURL(file);
     });
 }
 
-/*
-// PART 3B: Notifications, Sounds & Vibration (ANDROID-SAFE — FULLY RESTORED + PATCHED)
-*/
-
-// ================================
-// ===== GLOBAL FEEDBACK STATE ====
-// ================================
-
-const FEEDBACK = {
-  soundEnabled: persistentStorage.get('xame:sound', true),
-  vibrationEnabled: persistentStorage.get('xame:vibration', true),
-  vibrationPattern: [0, 150, 80, 150] // Android-friendly pattern
-};
-
-// ================================
-// ===== APP-SPECIFIC SOUND HOOKS =
-// ================================
-
-// 🔊 Message tone (used in Part 2)
-function playMessageTone() {
-  if (!FEEDBACK.soundEnabled) return;
-  playSound('message', false);
-}
-
-// 🔊 Incoming call ring (used in Part 4)
-function playCallRing() {
-  if (!FEEDBACK.soundEnabled) return;
-  playSound('incomingCall', true);
-}
-
-// 🔊 Outgoing call ring (used in Part 4)
-function playOutgoingRing() {
-  if (!FEEDBACK.soundEnabled) return;
-  playSound('outgoingCall', true);
-}
-
-// Stop rings
-function stopCallRing() {
-  stopSound('incomingCall');
-}
-
-function stopOutgoingRing() {
-  stopSound('outgoingCall');
-}
-
-// ================================
-// ===== UNIFIED NOTIFICATION =====
-// ================================
-
-function notifyWithFeedback(message, { sound = 'message', vibrate = true } = {}) {
-  // 1) In-app toast/banner (your existing UI)
-  showNotification(message);
-
-  // 2) Play sound (if enabled)
-  if (FEEDBACK.soundEnabled && sound) {
-    if (sound === 'message') {
-      playMessageTone();
-    } else {
-      playSound(sound);
-    }
-  }
-
-  // 3) Vibration (Cordova + Chrome Android safe)
-  if (FEEDBACK.vibrationEnabled && vibrate && 'vibrate' in navigator) {
-    try {
-      navigator.vibrate(FEEDBACK.vibrationPattern);
-    } catch (e) {
-      console.warn('Vibration failed:', e);
-    }
-  }
-}
-
-// ================================
-// ===== USER TOGGLES (UI HOOKS) ==
-// ================================
-
-function toggleSound(on) {
-  FEEDBACK.soundEnabled = !!on;
-  persistentStorage.set('xame:sound', FEEDBACK.soundEnabled);
-}
-
-function toggleVibration(on) {
-  FEEDBACK.vibrationEnabled = !!on;
-  persistentStorage.set('xame:vibration', FEEDBACK.vibrationEnabled);
-}
-
-// ================================
-// ===== RESTORE ON BOOT ==========
-// ================================
-
-try {
-  FEEDBACK.soundEnabled = persistentStorage.get('xame:sound', true);
-  FEEDBACK.vibrationEnabled = persistentStorage.get('xame:vibration', true);
-  console.log('🔊 Feedback settings restored:', FEEDBACK);
-} catch (e) {
-  console.warn('Could not restore feedback settings:', e);
-}
-
-// ================================
-// ===== CORDOVA AUDIO SAFETY =====
-// ================================
-
-document.addEventListener('deviceready', () => {
-  console.log('Cordova ready — ensuring audio preload');
-
-  Object.values(APP_SOUNDS).forEach(audio => {
-    try {
-      audio.preload = 'auto';
-      audio.load();
-    } catch (e) {
-      console.warn('Audio preload failed:', e);
-    }
-  });
-});
-
-// ================================
-// ===== OPTIONAL DEBUG HELPERS ====
-// ================================
-
-function debugPlayAllSounds() {
-  console.log('Testing all app sounds...');
-  playMessageTone();
-  setTimeout(playCallRing, 800);
-  setTimeout(playOutgoingRing, 1600);
-  setTimeout(() => {
-    stopCallRing();
-    stopOutgoingRing();
-  }, 4000);
-}
 
 /*
-/*
-// PART 3C: CAMERA FUNCTIONALITY - ENHANCED WITH SCREEN SIZE TOGGLE
+// PART 3.5: CAMERA FUNCTIONALITY - ENHANCED WITH SCREEN SIZE TOGGLE
 */
 
 // Camera modal elements
@@ -1959,7 +1539,11 @@ const toggleLoudspeaker = () => {
     isLoudspeakerOn = !isLoudspeakerOn;
     if (remoteVideo) {
         remoteVideo.muted = !isLoudspeakerOn;
-        remoteVideo.volume = isLoudspeakerOn ? 1 : 0;
+        if (isLoudspeakerOn) {
+            remoteVideo.volume = 1;
+        } else {
+            remoteVideo.volume = 0;
+        }
     }
     loudSpeakerBtn.classList.toggle('active', isLoudspeakerOn);
     loudSpeakerBtn.textContent = isLoudspeakerOn ? '🔊' : '🔈';
@@ -2019,220 +1603,333 @@ const incomingCallOverlay = $('#incomingCallOverlay');
 const acceptCallBtn = $('#acceptCallBtn');
 const declineCallBtn = $('#declineCallBtn');
 
+// ✅ FIXED: Parameter name was broken across lines
 function showIncomingCallNotification(caller, callType, offer) {
-
-  // ✅ USE PATCHED SOUND HOOK
-  playCallRing();
-
-  const localContact = CONTACTS.find(c => c.id === caller.xameId);
+    const localContact = CONTACTS.find(c => c.id === caller.xameId);
     
-  const displayName = localContact 
+    const displayName = localContact 
                         ? localContact.name 
                         : (caller.name || "Unknown Caller"); 
     
-  const displayId = caller.xameId;
+    const displayId = caller.xameId;
 
-  $('#callerName').textContent = displayName;
-  $('#callerId').textContent = displayId;
-  $('#callStatus').textContent = `Incoming ${callType} call...`;
+    $('#callerName').textContent = displayName;
+    $('#callerId').textContent = displayId;
+    $('#callStatus').textContent = `Incoming ${callType} call...`;
     
-  const callerPicEl = $('#callerPic');
-  const callAvatarInitialsEl = $('#callAvatarInitials');
+    const callerPicEl = $('#callerPic');
+    const callAvatarInitialsEl = $('#callAvatarInitials');
     
-  let callerPicUrl = caller.profilePic;
-  let showPlaceholder = !caller.profilePic;
+    let callerPicUrl = caller.profilePic;
+    let showPlaceholder = !caller.profilePic;
     
-  if (localContact && localContact.isProfilePicHidden) {
-      showPlaceholder = true;
-      callerPicUrl = null;
-  }
+    if (localContact && localContact.isProfilePicHidden) {
+        showPlaceholder = true;
+        callerPicUrl = null;
+    }
     
-  if (callerPicUrl && !showPlaceholder) {
-      callerPicUrl = addCacheBuster(callerPicUrl);
-      callerPicEl.src = callerPicUrl;
-      callerPicEl.classList.remove('hidden');
-      callAvatarInitialsEl.classList.add('hidden');
-  } else {
-      const initials = initialsOf({ name: displayName });
-      callAvatarInitialsEl.textContent = initials;
-      callAvatarInitialsEl.classList.remove('hidden');
-      callerPicEl.classList.add('hidden');
-  }
+    if (callerPicUrl && !showPlaceholder) {
+        callerPicUrl = addCacheBuster(callerPicUrl);
+        callerPicEl.src = callerPicUrl;
+        callerPicEl.classList.remove('hidden');
+        callAvatarInitialsEl.classList.add('hidden');
+    } else {
+        const initials = initialsOf({ name: displayName });
+        callAvatarInitialsEl.textContent = initials;
+        callAvatarInitialsEl.classList.remove('hidden');
+        callerPicEl.classList.add('hidden');
+    }
     
-  incomingCallOverlay.classList.remove('hidden');
+    incomingCallOverlay.classList.remove('hidden');
     
-  acceptCallBtn.onclick = async () => {
-      stopCallRing();
-      incomingCallOverlay.classList.add('hidden');
-      openChat(caller.xameId);
-      await handleIncomingCall(offer, caller.xameId);
-      socket?.emit('call-accepted', { recipientId: caller.xameId });
-  };
+    acceptCallBtn.onclick = async () => {
+        incomingCallOverlay.classList.add('hidden');
+        openChat(caller.xameId);
+        await handleIncomingCall(offer, caller.xameId);
+        if (socket) {
+            socket.emit('call-accepted', { recipientId: caller.xameId });
+        }
+    };
     
-  declineCallBtn.onclick = () => {
-      stopCallRing();
-      incomingCallOverlay.classList.add('hidden');
-      socket?.emit('call-rejected', { recipientId: caller.xameId, reason: 'user-rejected' });
-  };
+    declineCallBtn.onclick = () => {
+        incomingCallOverlay.classList.add('hidden');
+        if (socket) {
+            socket.emit('call-rejected', { recipientId: caller.xameId, reason: 'user-rejected' });
+        }
+    };
 }
 
 async function startCall(recipientId, callType) {
-
-  // ✅ USE PATCHED SOUND HOOK
-  playOutgoingRing();
-
-  console.log('Starting call with', recipientId, 'of type', callType);
+    console.log('Starting call with', recipientId, 'of type', callType);
     
-  try {
-      const hasVideo = callType === 'video';
-      localStream = await navigator.mediaDevices.getUserMedia({
-          video: hasVideo,
-          audio: true
-      });
+    try {
+        const hasVideo = callType === 'video';
+        localStream = await navigator.mediaDevices.getUserMedia({
+            video: hasVideo,
+            audio: true
+        });
 
-      RESOURCES.localStreams.push(localStream);
+        RESOURCES.localStreams.push(localStream);
 
-      videoCallOverlay.classList.remove('hidden');
-      elChatHeader.classList.add('hidden');
-      composer.classList.add('hidden');
+        videoCallOverlay.classList.remove('hidden');
+        elChatHeader.classList.add('hidden');
+        composer.classList.add('hidden');
         
-      localVideo.srcObject = localStream;
-      localVideo.muted = true;
+        localVideo.srcObject = localStream;
+        localVideo.muted = true;
 
-      if (!hasVideo) {
-          localVideo.style.display = 'none';
-      } else {
-          localVideo.style.display = 'block';
-          makeDraggable(localVideo);
-      }
+        if (!hasVideo) {
+            localVideo.style.display = 'none';
+        } else {
+            localVideo.style.display = 'block';
+            makeDraggable(localVideo);
+        }
 
-      peerConnection = new RTCPeerConnection(rtcConfig);
-      RESOURCES.peerConnections.push(peerConnection);
+        peerConnection = new RTCPeerConnection(rtcConfig);
+        RESOURCES.peerConnections.push(peerConnection);
         
-      peerConnection.ontrack = (event) => {
-          console.log('Received remote track of kind:', event.track.kind);
-          remoteStream = event.streams[0]; 
+        peerConnection.ontrack = (event) => {
+            console.log('Received remote track of kind:', event.track.kind);
+            remoteStream = event.streams[0]; 
             
-          if (remoteStream && remoteStream.getTracks().length > 0) {
-               remoteVideo.srcObject = remoteStream;
-               remoteVideo.muted = false;
-               remoteVideo.play().catch(e => console.error("Error playing remote video:", e));
-          }
-      };
+            if (remoteStream && remoteStream.getTracks().length > 0) {
+                 remoteVideo.srcObject = remoteStream;
+                 remoteVideo.muted = false;
+                 remoteVideo.play().catch(e => console.error("Error playing remote video:", e));
+                 console.log('Remote stream attached to remoteVideo and playing.');
+            } else {
+                 console.warn('Received ontrack event but the stream was empty or invalid.');
+            }
+        };
         
-      peerConnection.oniceconnectionstatechange = () => {
-          console.log(`ICE connection state changed to: ${peerConnection.iceConnectionState}`);
+        peerConnection.oniceconnectionstatechange = () => {
+            console.log(`ICE connection state changed to: ${peerConnection.iceConnectionState}`);
             
-          if (peerConnection.iceConnectionState === 'failed' || 
-              peerConnection.iceConnectionState === 'disconnected') {
-              showNotification('Connection lost. Ending call...');
-              setTimeout(exitVideoCall, 2000);
-          }
-      };
+            if (peerConnection.iceConnectionState === 'failed' || 
+                peerConnection.iceConnectionState === 'disconnected') {
+                showNotification('Connection lost. Ending call...');
+                setTimeout(exitVideoCall, 2000);
+            }
+        };
 
-      peerConnection.onicecandidate = (event) => {
-          if (event.candidate) {
-              socket?.emit('ice-candidate', {
-                  recipientId,
-                  candidate: event.candidate
-              });
-          }
-      };
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate) {
+                console.log('Sending ICE candidate');
+                if (socket) {
+                    socket.emit('ice-candidate', {
+                        recipientId,
+                        candidate: event.candidate
+                    });
+                }
+            }
+        };
         
-      localStream.getTracks().forEach(track => {
-          peerConnection.addTrack(track, localStream);
-      });
+        localStream.getTracks().forEach(track => {
+            peerConnection.addTrack(track, localStream);
+            console.log(`Adding local track: ${track.kind} - Enabled: ${track.enabled}`);
+        });
         
-      const offer = await peerConnection.createOffer();
-      await peerConnection.setLocalDescription(offer);
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
         
-      socket?.emit('call-user', {
-          recipientId, 
-          offer,           
-          callType      
-      });
+        if (socket) {
+            socket.emit('call-user', {
+                recipientId: recipientId, 
+                offer: offer,           
+                callType: callType      
+            });
+        }
 
-  } catch (err) {
-      console.error('Failed to get local stream or start call', err);
-      showNotification('Failed to start call. Check permissions.');
-      exitVideoCall();
-  }
+    } catch (err) {
+        console.error('Failed to get local stream or start call', err);
+        showNotification('Failed to start call. Please check your camera and microphone permissions.');
+        exitVideoCall();
+    }
+}
+
+async function handleIncomingCall(offer, senderId) {
+    console.log('Received offer from', senderId);
+    
+    try {
+        const hasVideo = offer.sdp.includes('m=video');
+        
+        localStream = await navigator.mediaDevices.getUserMedia({
+            video: hasVideo,
+            audio: true
+        });
+
+        RESOURCES.localStreams.push(localStream);
+
+        videoCallOverlay.classList.remove('hidden');
+        elChatHeader.classList.add('hidden');
+        composer.classList.add('hidden');
+
+        localVideo.srcObject = localStream;
+        localVideo.muted = true;
+
+        if (!hasVideo) {
+            localVideo.style.display = 'none';
+        } else {
+            localVideo.style.display = 'block';
+            makeDraggable(localVideo);
+        }
+
+        peerConnection = new RTCPeerConnection(rtcConfig);
+        RESOURCES.peerConnections.push(peerConnection);
+        
+        peerConnection.ontrack = (event) => {
+            console.log('Received remote track of kind:', event.track.kind);
+            remoteStream = event.streams[0]; 
+            
+            if (remoteStream && remoteStream.getTracks().length > 0) {
+                 remoteVideo.srcObject = remoteStream;
+                 remoteVideo.muted = false;
+                 remoteVideo.play().catch(e => console.error("Error playing remote video:", e));
+                 console.log('Remote stream attached to remoteVideo and playing.');
+            } else {
+                 console.warn('Received ontrack event but the stream was empty or invalid.');
+            }
+        };
+
+        peerConnection.oniceconnectionstatechange = () => {
+            console.log(`ICE connection state changed to: ${peerConnection.iceConnectionState}`);
+            
+            if (peerConnection.iceConnectionState === 'failed' || 
+                peerConnection.iceConnectionState === 'disconnected') {
+                showNotification('Connection lost. Ending call...');
+                setTimeout(exitVideoCall, 2000);
+            }
+        };
+
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate) {
+                console.log('Sending ICE candidate');
+                if (socket) {
+                    socket.emit('ice-candidate', {
+                        recipientId: senderId,
+                        candidate: event.candidate
+                    });
+                }
+            }
+        };
+
+        localStream.getTracks().forEach(track => {
+            peerConnection.addTrack(track, localStream);
+            console.log(`Adding local track: ${track.kind} - Enabled: ${track.enabled}`);
+        });
+
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        
+        console.log('Processing pending ICE candidates:', pendingIceCandidates.length);
+        for (const candidate of pendingIceCandidates) {
+            try {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (error) {
+                console.error('Failed to add ICE candidate:', error);
+            }
+        }
+        pendingIceCandidates = [];
+
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        
+        if (socket) {
+            socket.emit('make-answer', {
+                recipientId: senderId,
+                answer
+            });
+        }
+        
+    } catch (err) {
+        console.error('Failed to handle incoming call:', err);
+        showNotification('Failed to accept call. Please check your camera and microphone permissions.');
+        exitVideoCall();
+    }
 }
 
 async function handleAnswer(answer) {
+    console.log('Received answer');
+    
+    try {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
 
-  // ✅ STOP OUTGOING RING WHEN ANSWERED
-  stopOutgoingRing();
-
-  try {
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-
-      for (const candidate of pendingIceCandidates) {
-          try {
-              await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-          } catch (error) {
-              console.error('Failed to add ICE candidate:', error);
-          }
-      }
-      pendingIceCandidates = [];
-  } catch (error) {
-      console.error('Failed to handle answer:', error);
-      showNotification('Call connection failed');
-      exitVideoCall();
-  }
+        console.log('Processing pending ICE candidates:', pendingIceCandidates.length);
+        for (const candidate of pendingIceCandidates) {
+            try {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (error) {
+                console.error('Failed to add ICE candidate:', error);
+            }
+        }
+        pendingIceCandidates = [];
+    } catch (error) {
+        console.error('Failed to handle answer:', error);
+        showNotification('Call connection failed');
+        exitVideoCall();
+    }
 }
 
 function handleNewIceCandidate(candidate) {
-  if (peerConnection) {
-      if (peerConnection.remoteDescription) {
-          peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
-              .catch(error => {
-                  console.error('Failed to add ICE candidate:', error);
-              });
-      } else {
-          pendingIceCandidates.push(candidate);
-      }
-  } else {
-      pendingIceCandidates.push(candidate);
-  }
+    console.log('Received ICE candidate');
+    
+    if (peerConnection) {
+        if (peerConnection.remoteDescription) {
+            peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
+                .catch(error => {
+                    console.error('Failed to add ICE candidate:', error);
+                });
+        } else {
+            console.log('Remote description not set yet, queuing candidate.');
+            pendingIceCandidates.push(candidate);
+        }
+    } else {
+        console.error('Peer connection is not initialized.');
+        pendingIceCandidates.push(candidate);
+    }
 }
 
 function endCall() {
-  console.log('Ending call and cleaning up resources...');
+    console.log('Ending call and cleaning up resources...');
     
-  if (peerConnection) {
-      peerConnection.close();
-      peerConnection = null;
-  }
+    if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+    }
     
-  if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
-      localStream = null;
-  }
+    if (localStream) {
+        localStream.getTracks().forEach(track => {
+            track.stop();
+            console.log(`Stopped local track: ${track.kind}`);
+        });
+        localStream = null;
+    }
     
-  if (remoteStream) {
-      remoteStream.getTracks().forEach(track => track.stop());
-      remoteStream = null;
-  }
+    if (remoteStream) {
+        remoteStream.getTracks().forEach(track => {
+            track.stop();
+            console.log(`Stopped remote track: ${track.kind}`);
+        });
+        remoteStream = null;
+    }
     
-  RESOURCES.localStreams.forEach(stream => {
-      stream.getTracks().forEach(track => track.stop());
-  });
-  RESOURCES.localStreams = [];
+    RESOURCES.localStreams.forEach(stream => {
+        stream.getTracks().forEach(track => track.stop());
+    });
+    RESOURCES.localStreams = [];
     
-  RESOURCES.peerConnections.forEach(pc => {
-      if (pc && pc.connectionState !== 'closed') {
-          pc.close();
-      }
-  });
-  RESOURCES.peerConnections = [];
+    RESOURCES.peerConnections.forEach(pc => {
+        if (pc && pc.connectionState !== 'closed') {
+            pc.close();
+        }
+    });
+    RESOURCES.peerConnections = [];
     
-  pendingIceCandidates = [];
-  isAudioMuted = false;
-  isVideoMuted = false;
-  isLoudspeakerOn = false;
+    pendingIceCandidates = [];
+    isAudioMuted = false;
+    isVideoMuted = false;
+    isLoudspeakerOn = false;
     
-  console.log('Call ended and resources cleaned up.');
+    console.log('Call ended and resources cleaned up.');
 }
 
 /*
@@ -2784,906 +2481,756 @@ function openChat(id) {
     }
     markAllSeen(id);
 }
-
-/*
-// PART 5B: Notification & Vibration Toggles (UI + Logic) — FULLY INTEGRATED
-*/
-
-// ===== STATE (derived from FEEDBACK in Part 3) =====
-let soundOn = FEEDBACK.soundEnabled;
-let vibrationOn = FEEDBACK.vibrationEnabled;
-
-// ===== CREATE TOGGLE BUTTONS IN HEADER =====
-function renderNotificationToggles() {
-  if (!elChatHeader) return;
-
-  // Remove existing to avoid duplicates
-  elChatHeader.querySelector('.notif-toggles')?.remove();
-
-  const wrapper = document.createElement('div');
-  wrapper.className = 'notif-toggles';
-  wrapper.style.cssText = `
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    margin-left: 8px;
-  `;
-
-  // ===== SOUND TOGGLE =====
-  const soundBtn = document.createElement('button');
-  soundBtn.id = 'toggleSoundBtn';
-  soundBtn.className = 'icon-btn';
-  soundBtn.title = 'Toggle sound';
-  soundBtn.innerHTML = soundOn ? '🔊' : '🔈';
-
-  soundBtn.addEventListener('click', () => {
-    soundOn = !soundOn;
-
-    // Sync with global FEEDBACK system (Part 3)
-    toggleSound(soundOn);
-
-    soundBtn.innerHTML = soundOn ? '🔊' : '🔈';
-    notifyWithFeedback(soundOn ? 'Sound enabled' : 'Sound muted', {
-      sound: null, // don't play a tone when toggling itself
-      vibrate: false
-    });
-  });
-
-  // ===== VIBRATION TOGGLE =====
-  const vibeBtn = document.createElement('button');
-  vibeBtn.id = 'toggleVibrationBtn';
-  vibeBtn.className = 'icon-btn';
-  vibeBtn.title = 'Toggle vibration';
-  vibeBtn.innerHTML = vibrationOn ? '📳' : '🔕';
-
-  vibeBtn.addEventListener('click', () => {
-    vibrationOn = !vibrationOn;
-
-    // Sync with global FEEDBACK system (Part 3)
-    toggleVibration(vibrationOn);
-
-    vibeBtn.innerHTML = vibrationOn ? '📳' : '🔕';
-    notifyWithFeedback(
-      vibrationOn ? 'Vibration enabled' : 'Vibration muted',
-      { sound: null, vibrate: false }
-    );
-
-    // Quick test pulse when turned ON (Android-safe)
-    if (vibrationOn && 'vibrate' in navigator) {
-      try {
-        navigator.vibrate([0, 120]);
-      } catch (e) {
-        console.warn('Test vibration failed:', e);
-      }
-    }
-  });
-
-  wrapper.appendChild(soundBtn);
-  wrapper.appendChild(vibeBtn);
-
-  // Insert near existing header buttons
-  const btnGroup = elChatHeader.querySelector('.icon-btn-group');
-  if (btnGroup) {
-    btnGroup.insertAdjacentElement('afterend', wrapper);
-  } else {
-    elChatHeader.appendChild(wrapper);
-  }
-}
-
-// ===== KEEP UI IN SYNC WITH STORED SETTINGS =====
-function syncToggleUIWithStorage() {
-  soundOn = FEEDBACK.soundEnabled;
-  vibrationOn = FEEDBACK.vibrationEnabled;
-
-  const soundBtn = document.getElementById('toggleSoundBtn');
-  const vibeBtn = document.getElementById('toggleVibrationBtn');
-
-  if (soundBtn) {
-    soundBtn.innerHTML = soundOn ? '🔊' : '🔈';
-  }
-
-  if (vibeBtn) {
-    vibeBtn.innerHTML = vibrationOn ? '📳' : '🔕';
-  }
-}
-
-// ===== INIT =====
-document.addEventListener('DOMContentLoaded', () => {
-  renderNotificationToggles();
-  syncToggleUIWithStorage();
-});
-
-document.addEventListener('deviceready', () => {
-  renderNotificationToggles();
-  syncToggleUIWithStorage();
-});
-
 /*
 // PART 6: Chat More Menu & Contact Management with Fixes
 */
 
 function renderChatMoreMenu() {
-  const wrap = document.createElement('div');
-  wrap.className = 'menu-panel dialog-like';
-  wrap.innerHTML = `
-      <div class="menu-item" id="voiceCallBtn">📞 Voice Call</div>
-      <div class="menu-item" id="videoCallBtn">📹 Video Call</div>
-      <div class="menu-item" id="editContactBtn">✍️ Edit Contact Name</div>
-      <div class="menu-item" id="clearChatBtn">🗑 Clear Chat</div>
-      <div class="menu-item" id="deleteContactBtn">❌ Delete Contact</div>
-  `;
+    const wrap = document.createElement('div');
+    wrap.className = 'menu-panel dialog-like';
+    wrap.innerHTML = `
+        <div class="menu-item" id="voiceCallBtn">📞 Voice Call</div>
+        <div class="menu-item" id="videoCallBtn">📹 Video Call</div>
+        <div class="menu-item" id="editContactBtn">✍️ Edit Contact Name</div>
+        <div class="menu-item" id="clearChatBtn">🗑 Clear Chat</div>
+        <div class="menu-item" id="deleteContactBtn">❌ Delete Contact</div>
+    `;
 
-  const chatMoreBtn = $('#chatMoreBtn');
-  if (!chatMoreBtn) return;
+    const chatMoreBtn = $('#chatMoreBtn');
+    if (!chatMoreBtn) return;
+    
+    const rect = chatMoreBtn.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
 
-  // Ensure we have a layer
-  if (!layer) {
-    console.warn('Menu layer not found');
-    return;
-  }
+    let top = rect.bottom + 5;
+    let right = viewportWidth - rect.right;
 
-  // Remove any existing menu first (prevents duplicates)
-  layer.querySelector('.menu-panel')?.remove();
+    layer.appendChild(wrap);
+    const menuRect = wrap.getBoundingClientRect();
 
-  const rect = chatMoreBtn.getBoundingClientRect();
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
+    if (top + menuRect.height > viewportHeight) {
+      top = rect.top - menuRect.height - 5;
+    }
 
-  let top = rect.bottom + 5;
-  let right = viewportWidth - rect.right;
+    if (right + menuRect.width > viewportWidth) {
+      right = 5;
+    }
+    
+    wrap.style.top = `${top}px`;
+    wrap.style.right = `${right}px`;
 
-  layer.appendChild(wrap);
-  const menuRect = wrap.getBoundingClientRect();
+    const voiceCallBtn = wrap.querySelector('#voiceCallBtn');
+    const videoCallBtn = wrap.querySelector('#videoCallBtn');
+    const editContactBtn = wrap.querySelector('#editContactBtn');
+    const clearChatBtn = wrap.querySelector('#clearChatBtn');
+    const deleteContactBtn = wrap.querySelector('#deleteContactBtn');
 
-  if (top + menuRect.height > viewportHeight) {
-    top = rect.top - menuRect.height - 5;
-  }
+    if (voiceCallBtn) {
+        voiceCallBtn.addEventListener('click', () => {
+            startCall(ACTIVE_ID, 'voice');
+            closeDialog();
+        });
+    }
 
-  if (right + menuRect.width > viewportWidth) {
-    right = 5;
-  }
+    if (videoCallBtn) {
+        videoCallBtn.addEventListener('click', () => {
+            startCall(ACTIVE_ID, 'video');
+            closeDialog();
+        });
+    }
 
-  wrap.style.top = `${top}px`;
-  wrap.style.right = `${right}px`;
+    if (editContactBtn) {
+        editContactBtn.addEventListener('click', () => {
+            if (!ACTIVE_ID) return;
+            const c = CONTACTS.find(x => x.id === ACTIVE_ID);
+            if (c && ACTIVE_ID !== USER.xameId) {
+                closeDialog();
+                openDialog(renderEditContactDialog(c));
+            } else {
+                showNotification('Cannot edit this contact.');
+            }
+        });
+    }
+    
+    if (clearChatBtn) {
+        clearChatBtn.addEventListener('click', () => {
+            if (!ACTIVE_ID) return;
+            if (confirm('Are you sure you want to clear messages in this chat?')) { 
+                setChat(ACTIVE_ID, []);
+                const c = CONTACTS.find(x => x.id === ACTIVE_ID);
+                if(c) {
+                    c.lastInteractionTs = now();
+                    c.lastInteractionPreview = 'Chat cleared.';
+                    storage.set(KEYS.contacts, CONTACTS);
+                }
+                renderMessages();
+                closeDialog();
+                showNotification('Chat cleared successfully.');
+            }
+        });
+    }
 
-  const voiceCallBtn = wrap.querySelector('#voiceCallBtn');
-  const videoCallBtn = wrap.querySelector('#videoCallBtn');
-  const editContactBtn = wrap.querySelector('#editContactBtn');
-  const clearChatBtn = wrap.querySelector('#clearChatBtn');
-  const deleteContactBtn = wrap.querySelector('#deleteContactBtn');
+    if (deleteContactBtn) {
+        deleteContactBtn.addEventListener('click', () => {
+            const id = ACTIVE_ID;
+            if (!id) return;
+            const c = CONTACTS.find(x => x.id === id);
+            if (!c) return;
+            if (id === USER.xameId) {
+                showNotification('Cannot delete the self chat.');
+                return;
+            }
+            
+            if (confirm(`Permanently delete contact "${c.name || id}" and ALL chat/call history? This cannot be undone.`)) {
+                deleteContact(id); 
+                closeDialog();
+            }
+        });
+    }
 
-  if (voiceCallBtn) {
-    voiceCallBtn.addEventListener('click', () => {
-      if (!ACTIVE_ID) {
-        notifyWithFeedback('No active contact selected.');
-        return;
-      }
-      startCall(ACTIVE_ID, 'voice');
-      closeDialog();
-    });
-  }
-
-  if (videoCallBtn) {
-    videoCallBtn.addEventListener('click', () => {
-      if (!ACTIVE_ID) {
-        notifyWithFeedback('No active contact selected.');
-        return;
-      }
-      startCall(ACTIVE_ID, 'video');
-      closeDialog();
-    });
-  }
-
-  if (editContactBtn) {
-    editContactBtn.addEventListener('click', () => {
-      if (!ACTIVE_ID) return;
-      const c = CONTACTS.find(x => x.id === ACTIVE_ID);
-      if (c && ACTIVE_ID !== USER.xameId) {
-        closeDialog();
-        openDialog(renderEditContactDialog(c));
-      } else {
-        notifyWithFeedback('Cannot edit this contact.');
-      }
-    });
-  }
-
-  if (clearChatBtn) {
-    clearChatBtn.addEventListener('click', () => {
-      if (!ACTIVE_ID) return;
-
-      if (confirm('Are you sure you want to clear messages in this chat?')) {
-        setChat(ACTIVE_ID, []);
-        const c = CONTACTS.find(x => x.id === ACTIVE_ID);
-
-        if (c) {
-          c.lastInteractionTs = now();
-          c.lastInteractionPreview = 'Chat cleared.';
-          storage.set(KEYS.contacts, CONTACTS);
-        }
-
-        renderMessages();
-        closeDialog();
-        notifyWithFeedback('Chat cleared successfully.');
-      }
-    });
-  }
-
-  if (deleteContactBtn) {
-    deleteContactBtn.addEventListener('click', () => {
-      const id = ACTIVE_ID;
-      if (!id) return;
-
-      const c = CONTACTS.find(x => x.id === id);
-      if (!c) return;
-
-      if (id === USER.xameId) {
-        notifyWithFeedback('Cannot delete the self chat.');
-        return;
-      }
-
-      if (confirm(
-        `Permanently delete contact "${c.name || id}" and ALL chat/call history? This cannot be undone.`
-      )) {
-        deleteContact(id);
-        closeDialog();
-      }
-    });
-  }
-
-  openMenuDialog(wrap);
+    openMenuDialog(wrap);
 }
 
 async function deleteContact(contactId) {
-  if (!contactId || contactId === USER.xameId) {
-    return notifyWithFeedback('Invalid contact ID or cannot delete self chat.');
-  }
-
-  notifyWithFeedback(
-    `Permanently deleting contact ${contactId} and all chat history...`
-  );
-
-  const deleteBtn = document.querySelector('#deleteContactBtn');
-  if (deleteBtn) deleteBtn.disabled = true;
-
-  try {
-    const response = await fetch(`${serverURL}/api/delete-chat-and-contact`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: USER.xameId,
-        contactId: contactId
-      })
-    });
-
-    const data = await response.json();
-
-    if (response.ok && data.success) {
-      CONTACTS = CONTACTS.filter(c => c.id !== contactId);
-      storage.set(KEYS.contacts, CONTACTS);
-
-      delete CHAT_HISTORY[contactId];
-      storage.set(KEYS.chat(contactId), []);
-
-      openChat(USER.xameId);
-      debouncedRenderContacts(searchInput.value);
-
-      notifyWithFeedback('Contact and chat history permanently deleted.');
-    } else {
-      notifyWithFeedback(
-        data.message || 'Failed to delete contact and chat history.'
-      );
+    if (!contactId || contactId === USER.xameId) {
+        return showNotification('Invalid contact ID or cannot delete self chat.');
     }
-  } catch (err) {
-    console.error('Permanent deletion fetch error:', err);
-    notifyWithFeedback(
-      'Network error during permanent deletion. Please check your connection.'
-    );
-  } finally {
-    if (deleteBtn) deleteBtn.disabled = false;
-  }
+    
+    showNotification(`Permanently deleting contact ${contactId} and all chat history...`);
+
+    const deleteBtn = document.querySelector('#deleteContactBtn');
+    if (deleteBtn) deleteBtn.disabled = true;
+
+    try {
+        const response = await fetch(`${serverURL}/api/delete-chat-and-contact`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: USER.xameId, 
+                contactId: contactId
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+            CONTACTS = CONTACTS.filter(c => c.id !== contactId);
+            storage.set(KEYS.contacts, CONTACTS); 
+
+            delete CHAT_HISTORY[contactId];
+            storage.set(KEYS.chat(contactId), []);
+            
+            openChat(USER.xameId); 
+            
+            debouncedRenderContacts(searchInput.value); 
+            
+            showNotification('Contact and chat history permanently deleted.');
+
+        } else {
+            showNotification(data.message || 'Failed to delete contact and chat history.');
+        }
+
+    } catch (err) {
+        console.error('Permanent deletion fetch error:', err);
+        showNotification('Network error during permanent deletion. Please check your connection.');
+    } finally {
+        if (deleteBtn) deleteBtn.disabled = false;
+    }
 }
 
 function clearAllChats() {
-  if (confirm(
-    'Are you sure you want to clear ALL messages from ALL chats? This action cannot be undone.'
-  )) {
-
-    let contacts = storage.get(KEYS.contacts, []);
-
-    contacts.forEach(c => {
-      storage.set(KEYS.chat(c.id), []);
-
-      if (c.id !== USER.xameId) {
-        c.lastInteractionTs = now();
-        c.lastInteractionPreview = 'All messages cleared.';
-      }
-
-      c.unreadCount = 0;
-
-      if (DRAFTS[c.id]) {
-        delete DRAFTS[c.id];
-      }
-    });
-
-    storage.set(KEYS.contacts, contacts);
-    storage.set(KEYS.drafts, DRAFTS);
-
-    if (ACTIVE_ID) {
-      renderMessages();
-      if (messageInput) {
-        messageInput.value = DRAFTS[ACTIVE_ID] || '';
-      }
-      updateComposerButtons();
+    if (confirm('Are you sure you want to clear ALL messages from ALL chats? This action cannot be undone.')) {
+        
+        let contacts = storage.get(KEYS.contacts, []);
+        
+        contacts.forEach(c => {
+            storage.set(KEYS.chat(c.id), []);
+            
+            if (c.id !== USER.xameId) {
+                c.lastInteractionTs = now();
+                c.lastInteractionPreview = 'All messages cleared.';
+            }
+            c.unreadCount = 0;
+            
+            if (DRAFTS[c.id]) {
+                delete DRAFTS[c.id];
+            }
+        });
+        
+        storage.set(KEYS.contacts, contacts);
+        storage.set(KEYS.drafts, DRAFTS);
+        
+        if (ACTIVE_ID) {
+            renderMessages();
+            if (messageInput) {
+                messageInput.value = DRAFTS[ACTIVE_ID] || '';
+            }
+            updateComposerButtons();
+        }
+        debouncedRenderContacts(searchInput.value);
+        
+        showNotification('All chats have been cleared!');
     }
-
-    debouncedRenderContacts(searchInput.value);
-    notifyWithFeedback('All chats have been cleared!');
-  }
 }
 
 function renderEditContactDialog(contact) {
-  const wrap = document.createElement('div');
-  wrap.className = 'dialog-backdrop';
-  wrap.innerHTML = `
-    <div class="dialog fade-in">
-      <h3>Edit Contact Name</h3>
-      <div class="row" style="margin:8px 0 16px;">
-        <input id="editContactNameInput"
-               class="input"
-               placeholder="Enter a new name"
-               value="${escapeHtml(contact.name)}"
-               maxlength="60" />
+    const wrap = document.createElement('div');
+    wrap.className = 'dialog-backdrop';
+    wrap.innerHTML = `
+      <div class="dialog fade-in">
+        <h3>Edit Contact Name</h3>
+        <div class="row" style="margin:8px 0 16px;">
+          <input id="editContactNameInput" class="input" placeholder="Enter a new name" value="${escapeHtml(contact.name)}" maxlength="60" />
+        </div>
+        <div class="row">
+          <button class="btn" id="saveEditBtn">Save</button>
+          <button class="btn secondary" id="cancelEditBtn">Cancel</button>
+        </div>
+        <div id="editContactFeedback" class="feedback-message"></div>
       </div>
-      <div class="row">
-        <button class="btn" id="saveEditBtn">Save</button>
-        <button class="btn secondary" id="cancelEditBtn">Cancel</button>
-      </div>
-      <div id="editContactFeedback" class="feedback-message"></div>
-    </div>
-  `;
+    `;
 
-  const nameInput = wrap.querySelector('#editContactNameInput');
-  const saveBtn = wrap.querySelector('#saveEditBtn');
-  const cancelBtn = wrap.querySelector('#cancelEditBtn');
-  const feedbackEl = wrap.querySelector('#editContactFeedback');
+    const nameInput = wrap.querySelector('#editContactNameInput');
+    const saveBtn = wrap.querySelector('#saveEditBtn');
+    const cancelBtn = wrap.querySelector('#cancelEditBtn');
+    const feedbackEl = wrap.querySelector('#editContactFeedback');
 
-  cancelBtn?.addEventListener('click', () => closeDialog());
-
-  saveBtn?.addEventListener('click', async () => {
-    const newName = nameInput.value.trim();
-    if (!newName) {
-      notifyWithFeedback('Please enter a name.');
-      return;
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => closeDialog());
     }
 
-    saveBtn.disabled = true;
-    feedbackEl.textContent = 'Saving...';
+    if (saveBtn) {
+        saveBtn.addEventListener('click', async () => {
+            const newName = nameInput.value.trim();
+            if (!newName) {
+                showNotification('Please enter a name.');
+                return;
+            }
 
-    try {
-      const response = await fetch(`${serverURL}/api/update-contact`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: USER.xameId,
-          contactId: contact.id,
-          newName: newName
-        })
-      });
+            saveBtn.disabled = true;
+            feedbackEl.textContent = 'Saving...';
+            
+            try {
+                const response = await fetch(`${serverURL}/api/update-contact`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: USER.xameId, 
+                        contactId: contact.id,
+                        newName: newName
+                    })
+                });
 
-      const data = await response.json();
+                const data = await response.json();
 
-      if (response.ok && data.success) {
-        const contactToUpdate = CONTACTS.find(c => c.id === contact.id);
-        if (contactToUpdate) {
-          contactToUpdate.name = data.updatedName;
-          storage.set(KEYS.contacts, CONTACTS);
+                if (response.ok && data.success) {
+                    const contactToUpdate = CONTACTS.find(c => c.id === contact.id);
+                    if (contactToUpdate) {
+                        contactToUpdate.name = data.updatedName; 
+                        storage.set(KEYS.contacts, CONTACTS);
+                        
+                        debouncedRenderContacts(searchInput.value);
+                        openChat(contactToUpdate.id);
+                        
+                        closeDialog();
+                        showNotification('Contact name updated successfully!');
+                    }
+                } else {
+                    feedbackEl.textContent = data.message || `Save failed: ${response.statusText}.`;
+                }
 
-          debouncedRenderContacts(searchInput.value);
-          openChat(contactToUpdate.id);
-
-          closeDialog();
-          notifyWithFeedback('Contact name updated successfully!');
-        }
-      } else {
-        feedbackEl.textContent =
-          data.message || `Save failed: ${response.statusText}.`;
-      }
-    } catch (err) {
-      console.error('Update contact name fetch error:', err);
-      feedbackEl.textContent = 'Network error. Please try again.';
-    } finally {
-      saveBtn.disabled = false;
+            } catch (err) {
+                console.error('Update contact name fetch error:', err);
+                feedbackEl.textContent = 'Network error. Please try again.';
+            } finally {
+                saveBtn.disabled = false;
+            }
+        });
     }
-  });
 
-  return wrap;
+    return wrap;
 }
 
 /*
 // PART 7: FIXED Message Bubble with Waveform & Memory Leak Prevention
 */
 
-// ===== COMPREHENSIVE WAVESURFER CLEANUP =====
+// FIXED: Comprehensive cleanup function for WaveSurfer instances
 function cleanupWaveSurfers() {
-  if (!messagesEl) return;
-
-  // Destroy WaveSurfers attached directly to bubbles
-  const bubbles = messagesEl.querySelectorAll('.bubble');
-  bubbles.forEach(bubble => {
-    if (bubble.wavesurfer) {
-      try {
-        if (typeof bubble.wavesurfer.destroy === 'function') {
-          bubble.wavesurfer.destroy();
-          console.log('Destroyed bubble-attached wavesurfer');
+    if (!messagesEl) return;
+    
+    // Destroy all WaveSurfer instances attached to bubbles
+    const bubbles = messagesEl.querySelectorAll('.bubble');
+    bubbles.forEach(bubble => {
+        if (bubble.wavesurfer) {
+            try {
+                if (typeof bubble.wavesurfer.destroy === 'function') {
+                    bubble.wavesurfer.destroy();
+                    console.log('Destroyed wavesurfer instance');
+                }
+            } catch (error) {
+                console.error('Error destroying wavesurfer:', error);
+            }
+            delete bubble.wavesurfer;
         }
-      } catch (error) {
-        console.error('Error destroying bubble wavesurfer:', error);
-      }
-      delete bubble.wavesurfer;
-    }
-  });
-
-  // Destroy and clear tracked instances
-  RESOURCES.wavesurfers.forEach((ws, key) => {
-    try {
-      if (ws && typeof ws.destroy === 'function') {
-        ws.destroy();
-      }
-    } catch (error) {
-      console.error('Error destroying tracked wavesurfer:', error);
-    }
-  });
-
-  RESOURCES.wavesurfers.clear();
+    });
+    
+    // Clear the resources map
+    RESOURCES.wavesurfers.forEach((ws, key) => {
+        try {
+            if (ws && typeof ws.destroy === 'function') {
+                ws.destroy();
+            }
+        } catch (error) {
+            console.error('Error destroying tracked wavesurfer:', error);
+        }
+    });
+    RESOURCES.wavesurfers.clear();
 }
 
 function messageBubble(m) {
   const div = document.createElement('div');
   div.className = `bubble ${m.type}`;
   if (m.type === 'sent' && m.status === 'seen') {
-    div.classList.add('seen');
+      div.classList.add('seen');
   }
-
+  
   div.dataset.id = m.id;
-
+  
   if (selectedMessages.includes(m.id)) {
-    div.classList.add('selected');
+      div.classList.add('selected');
   }
 
-  // ===== SELECTION HANDLING =====
+  // Selection mode click handler
   div.addEventListener('click', (e) => {
-    if (selectedMessages.length > 0) {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleMessageSelection(m);
-    }
+      if (selectedMessages.length > 0) { 
+          e.preventDefault();
+          e.stopPropagation(); 
+          toggleMessageSelection(m);
+      }
   });
 
-  // ===== LONG PRESS DETECTION =====
+  // Long-press detection
   let pressTimer;
   let hasMoved = false;
   const LONG_PRESS_DELAY = 500;
   const MOVE_THRESHOLD = 10;
-  let startX = 0, startY = 0;
 
   const longPressAction = () => {
-    if (!hasMoved) {
-      div.style.transform = 'scale(0.98)';
-      setTimeout(() => (div.style.transform = ''), 100);
-
-      if (selectedMessages.length === 0) {
-        enterSelectMode();
+      if (!hasMoved) {
+          div.style.transform = 'scale(0.98)';
+          setTimeout(() => {
+              div.style.transform = '';
+          }, 100);
+          
+          if (selectedMessages.length === 0) {
+              enterSelectMode();
+          }
+          toggleMessageSelection(m);
       }
-      toggleMessageSelection(m);
-    }
   };
-
+  
+  let startX = 0, startY = 0;
+  
   const startTimer = (e) => {
-    clearTimeout(pressTimer);
-    hasMoved = false;
-
-    if (e.type === 'mousedown' && e.button !== 0) return;
-
-    if (e.type === 'touchstart') {
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
-    } else {
-      startX = e.clientX;
-      startY = e.clientY;
-    }
-
-    pressTimer = setTimeout(longPressAction, LONG_PRESS_DELAY);
-  };
-
-  const checkMove = (e) => {
-    let currentX, currentY;
-
-    if (e.type === 'touchmove') {
-      currentX = e.touches[0].clientX;
-      currentY = e.touches[0].clientY;
-    } else {
-      currentX = e.clientX;
-      currentY = e.clientY;
-    }
-
-    const deltaX = Math.abs(currentX - startX);
-    const deltaY = Math.abs(currentY - startY);
-
-    if (deltaX > MOVE_THRESHOLD || deltaY > MOVE_THRESHOLD) {
-      hasMoved = true;
       clearTimeout(pressTimer);
-    }
+      hasMoved = false;
+      
+      if (e.type === 'mousedown' && e.button !== 0) {
+          return;
+      }
+      
+      if (e.type === 'touchstart') {
+          startX = e.touches[0].clientX;
+          startY = e.touches[0].clientY;
+      } else {
+          startX = e.clientX;
+          startY = e.clientY;
+      }
+      
+      pressTimer = setTimeout(longPressAction, LONG_PRESS_DELAY); 
   };
-
-  const clearTimer = () => clearTimeout(pressTimer);
-
+  
+  const checkMove = (e) => {
+      let currentX, currentY;
+      
+      if (e.type === 'touchmove') {
+          currentX = e.touches[0].clientX;
+          currentY = e.touches[0].clientY;
+      } else {
+          currentX = e.clientX;
+          currentY = e.clientY;
+      }
+      
+      const deltaX = Math.abs(currentX - startX);
+      const deltaY = Math.abs(currentY - startY);
+      
+      if (deltaX > MOVE_THRESHOLD || deltaY > MOVE_THRESHOLD) {
+          hasMoved = true;
+          clearTimeout(pressTimer);
+      }
+  };
+  
+  const clearTimer = () => {
+      clearTimeout(pressTimer);
+  };
+  
   div.addEventListener('mousedown', startTimer);
   div.addEventListener('mousemove', checkMove);
   div.addEventListener('mouseup', clearTimer);
-  div.addEventListener('mouseleave', clearTimer);
-
-  div.addEventListener('touchstart', e => {
-    if (e.touches.length === 1) startTimer(e);
-  }, { passive: true });
-
+  div.addEventListener('mouseleave', clearTimer); 
+  
+  div.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+          startTimer(e);
+      }
+  }, { passive: true }); 
+  
   div.addEventListener('touchmove', checkMove, { passive: true });
   div.addEventListener('touchend', clearTimer);
   div.addEventListener('touchcancel', clearTimer);
 
-  div.addEventListener('contextmenu', e => e.preventDefault());
-
-  // ===== TEXT MESSAGE =====
+  div.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+  });
+  
+  // TEXT MESSAGE RENDERING
   if (m.text) {
-    div.innerHTML = `
-      <div>${escapeHtml(m.text)}</div>
-      <div class="time-row">
-        <button class="icon-btn speak-btn">🔊</button>
-        <span>${fmtTime(m.ts)}</span>
-        ${m.type === 'sent' ? `<span class="ticks">${renderTicks(m.status)}</span>` : ''}
-      </div>
-    `;
-
-    const speakBtn = div.querySelector('.speak-btn');
-    speakBtn?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      textToVoice(m.text);
-    });
-
-  // ===== FILE MESSAGE =====
-  } else if (m.file && m.file.url) {
-    let fileUrl = constructFileUrl(m.file.url);
-    const fileType = m.file.type;
-    const fileName = m.file.name || 'file';
-    let fileContent = '';
-
-    // IMAGE
-    if (fileType.startsWith('image/')) {
-      fileContent = `
-        <div class="image-preview" data-url="${escapeHtml(fileUrl)}">
-          <img src="${escapeHtml(fileUrl)}" alt="${escapeHtml(fileName)}" loading="lazy">
-          <div class="image-overlay">
-            <button class="view-fullscreen-btn">🔍 View</button>
+      div.innerHTML = `
+          <div>${escapeHtml(m.text)}</div>
+          <div class="time-row">
+              <button class="icon-btn speak-btn">🔊</button>
+              <span>${fmtTime(m.ts)}</span>
+              ${m.type === 'sent' ? `<span class="ticks">${renderTicks(m.status)}</span>` : ''}
           </div>
-        </div>
       `;
-    }
-    // VIDEO
-    else if (fileType.startsWith('video/')) {
-      fileContent = `
-        <div class="video-preview">
-          <video src="${escapeHtml(fileUrl)}" controls preload="metadata"></video>
-          <div class="file-info">
-            <span class="file-name">${escapeHtml(fileName)}</span>
-          </div>
-        </div>
-      `;
-    }
-    // AUDIO (WAVEFORM)
-    else if (fileType.startsWith('audio/')) {
-      const audioId = `audio-${m.id}`;
-      fileContent = `
-        <div class="audio-message-container">
-          <audio id="${audioId}" src="${escapeHtml(fileUrl)}" preload="metadata"></audio>
-          <div class="waveform-container" id="waveform-container-${m.id}">
-            <div class="waveform-loading">Loading waveform...</div>
-          </div>
-          <div class="audio-controls">
-            <button class="audio-play-btn" data-audio-id="${audioId}">▶️</button>
-            <span class="audio-time">0:00</span>
-            <a href="${escapeHtml(fileUrl)}" download="${escapeHtml(fileName)}"
-               class="download-btn" title="Download">⬇️</a>
-          </div>
-        </div>
-      `;
-    }
-    // DOCUMENT
-    else {
-      const fileIcon = getFileIcon(fileType, fileName);
-      fileContent = `
-        <a href="${escapeHtml(fileUrl)}" target="_blank"
-           download="${escapeHtml(fileName)}" class="document-preview">
-          <div class="doc-icon">${fileIcon}</div>
-          <div class="doc-details">
-            <span class="doc-name">${escapeHtml(fileName)}</span>
-            <span class="doc-type">
-              ${(fileType.split('/')[1] || 'FILE').toUpperCase()}
-            </span>
-          </div>
-          <button class="doc-download-btn" title="Download">⬇️</button>
-        </a>
-      `;
-    }
-
-    div.innerHTML = `
-      <div class="file-message">${fileContent}</div>
-      <div class="time-row">
-        <span>${fmtTime(m.ts)}</span>
-        ${m.type === 'sent' ? `<span class="ticks">${renderTicks(m.status)}</span>` : ''}
-      </div>
-    `;
-
-    // Image fullscreen viewer
-    const imagePreview = div.querySelector('.image-preview');
-    imagePreview?.addEventListener('click', (e) => {
-      if (selectedMessages.length > 0) return;
-      e.stopPropagation();
-      openImageFullscreen(fileUrl, fileName);
-    });
-
-    // ===== AUDIO WAVEFORM INIT (SAFE) =====
-    if (fileType.startsWith('audio/')) {
-      const audioElement = div.querySelector(`#audio-${m.id}`);
-      const waveformContainer =
-        div.querySelector(`#waveform-container-${m.id}`);
-      const playBtn = div.querySelector('.audio-play-btn');
-      const timeDisplay = div.querySelector('.audio-time');
-
-      if (audioElement && waveformContainer &&
-          typeof WaveSurfer !== 'undefined') {
-
-        // Destroy any previous instance for this message
-        const existingWs = RESOURCES.wavesurfers.get(m.id);
-        if (existingWs) {
-          try {
-            existingWs.destroy();
-          } catch (e) {}
-          RESOURCES.wavesurfers.delete(m.id);
-        }
-
-        waveformContainer.innerHTML = '';
-        const waveformDiv = document.createElement('div');
-        waveformDiv.className = 'waveform';
-        waveformContainer.appendChild(waveformDiv);
-
-        try {
-          const wavesurfer = WaveSurfer.create({
-            container: waveformDiv,
-            waveColor: m.type === 'sent'
-              ? 'rgba(255,255,255,0.5)'
-              : '#9aa8b2',
-            progressColor: m.type === 'sent'
-              ? '#fff'
-              : '#0084ff',
-            cursorColor: 'transparent',
-            barWidth: 2,
-            barRadius: 3,
-            height: 50,
-            barGap: 2,
-            responsive: true,
-            interact: true
+      const speakBtn = div.querySelector('.speak-btn');
+      if (speakBtn) {
+          speakBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              textToVoice(m.text);
           });
-
-          wavesurfer.load(fileUrl);
-
-          wavesurfer.on('ready', () => {
-            const duration = wavesurfer.getDuration();
-            if (timeDisplay) {
-              timeDisplay.textContent = formatDuration(duration);
-            }
-          });
-
-          wavesurfer.on('audioprocess', () => {
-            if (timeDisplay) {
-              timeDisplay.textContent =
-                formatDuration(wavesurfer.getCurrentTime());
-            }
-          });
-
-          wavesurfer.on('finish', () => {
-            if (playBtn) playBtn.textContent = '▶️';
-          });
-
-          playBtn?.addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (wavesurfer.isPlaying()) {
-              wavesurfer.pause();
-              playBtn.textContent = '▶️';
-            } else {
-              wavesurfer.play();
-              playBtn.textContent = '⏸️';
-            }
-          });
-
-          // Track for cleanup
-          div.wavesurfer = wavesurfer;
-          RESOURCES.wavesurfers.set(m.id, wavesurfer);
-
-        } catch (error) {
-          console.error('Failed to create waveform:', error);
-          waveformContainer.innerHTML =
-            '<div class="waveform-error">Waveform unavailable</div>';
-        }
       }
-    }
 
-  // ===== FALLBACK / ERROR =====
+  } else if (m.file && m.file.url) {
+      // FILE MESSAGE RENDERING
+      let fileContent = '';
+      
+      // FIXED: Proper file URL construction
+      let fileUrl = constructFileUrl(m.file.url);
+      
+      console.log('🔗 File URL:', {
+          original: m.file.url,
+          constructed: fileUrl
+      });
+      
+      const fileType = m.file.type;
+      const fileName = m.file.name || 'file';
+      
+      // IMAGE HANDLING
+      if (fileType.startsWith('image/')) {
+          fileContent = `
+              <div class="image-preview" data-url="${escapeHtml(fileUrl)}">
+                  <img src="${escapeHtml(fileUrl)}" alt="${escapeHtml(fileName)}" loading="lazy">
+                  <div class="image-overlay">
+                      <button class="view-fullscreen-btn">🔍 View</button>
+                  </div>
+              </div>
+          `;
+      } 
+      // VIDEO HANDLING
+      else if (fileType.startsWith('video/')) {
+          fileContent = `
+              <div class="video-preview">
+                  <video src="${escapeHtml(fileUrl)}" controls preload="metadata">
+                      Your browser does not support video playback.
+                  </video>
+                  <div class="file-info">
+                      <span class="file-name">${escapeHtml(fileName)}</span>
+                  </div>
+              </div>
+          `;
+      } 
+      // AUDIO HANDLING WITH WAVEFORM
+      else if (fileType.startsWith('audio/')) {
+          const audioId = `audio-${m.id}`;
+          fileContent = `
+              <div class="audio-message-container">
+                  <audio id="${audioId}" src="${escapeHtml(fileUrl)}" preload="metadata"></audio>
+                  <div class="waveform-container" id="waveform-container-${m.id}">
+                      <div class="waveform-loading">Loading waveform...</div>
+                  </div>
+                  <div class="audio-controls">
+                      <button class="audio-play-btn" data-audio-id="${audioId}">▶️</button>
+                      <span class="audio-time">0:00</span>
+                      <a href="${escapeHtml(fileUrl)}" download="${escapeHtml(fileName)}" class="download-btn" title="Download">⬇️</a>
+                  </div>
+              </div>
+          `;
+      } 
+      // DOCUMENT HANDLING
+      else {
+          const fileIcon = getFileIcon(fileType, fileName);
+          fileContent = `
+              <a href="${escapeHtml(fileUrl)}" target="_blank" download="${escapeHtml(fileName)}" class="document-preview">
+                  <div class="doc-icon">${fileIcon}</div>
+                  <div class="doc-details">
+                      <span class="doc-name">${escapeHtml(fileName)}</span>
+                      <span class="doc-type">${escapeHtml(fileType.split('/')[1]?.toUpperCase() || 'FILE')}</span>
+                  </div>
+                  <button class="doc-download-btn" title="Download">⬇️</button>
+              </a>
+          `;
+      }
+
+      div.innerHTML = `
+          <div class="file-message">
+              ${fileContent}
+          </div>
+          <div class="time-row">
+              <span>${fmtTime(m.ts)}</span>
+              ${m.type === 'sent' ? `<span class="ticks">${renderTicks(m.status)}</span>` : ''}
+          </div>
+      `;
+
+      // POST-RENDER HANDLERS
+      
+      // Image fullscreen viewer
+      const imagePreview = div.querySelector('.image-preview');
+      if (imagePreview) {
+          imagePreview.addEventListener('click', (e) => {
+              if (selectedMessages.length > 0) return;
+              e.stopPropagation();
+              openImageFullscreen(fileUrl, fileName);
+          });
+      }
+
+      // FIXED: Audio waveform initialization with proper cleanup
+      if (fileType.startsWith('audio/')) {
+          const audioElement = div.querySelector(`#audio-${m.id}`);
+          const waveformContainer = div.querySelector(`#waveform-container-${m.id}`);
+          const playBtn = div.querySelector('.audio-play-btn');
+          const timeDisplay = div.querySelector('.audio-time');
+          
+          if (audioElement && waveformContainer && typeof WaveSurfer !== 'undefined') {
+              // Check if WaveSurfer already exists for this message
+              const existingWs = RESOURCES.wavesurfers.get(m.id);
+              if (existingWs) {
+                  try {
+                      existingWs.destroy();
+                      RESOURCES.wavesurfers.delete(m.id);
+                  } catch (e) {
+                      console.error('Failed to destroy existing WaveSurfer:', e);
+                  }
+              }
+              
+              waveformContainer.innerHTML = '';
+              
+              const waveformDiv = document.createElement('div');
+              waveformDiv.className = 'waveform';
+              waveformContainer.appendChild(waveformDiv);
+              
+              try {
+                  const wavesurfer = WaveSurfer.create({
+                      container: waveformDiv,
+                      waveColor: m.type === 'sent' ? 'rgba(255,255,255,0.5)' : '#9aa8b2',
+                      progressColor: m.type === 'sent' ? '#fff' : '#0084ff',
+                      cursorColor: 'transparent',
+                      barWidth: 2,
+                      barRadius: 3,
+                      height: 50,
+                      barGap: 2,
+                      responsive: true,
+                      interact: true
+                  });
+
+                  wavesurfer.load(fileUrl);
+                  
+                  wavesurfer.on('ready', () => {
+                      const duration = wavesurfer.getDuration();
+                      if (timeDisplay) {
+                          timeDisplay.textContent = formatDuration(duration);
+                      }
+                  });
+
+                  wavesurfer.on('audioprocess', () => {
+                      const currentTime = wavesurfer.getCurrentTime();
+                      if (timeDisplay) {
+                          timeDisplay.textContent = formatDuration(currentTime);
+                      }
+                  });
+
+                  wavesurfer.on('finish', () => {
+                      if (playBtn) {
+                          playBtn.textContent = '▶️';
+                      }
+                  });
+
+                  if (playBtn) {
+                      playBtn.addEventListener('click', (e) => {
+                          e.stopPropagation();
+                          if (wavesurfer.isPlaying()) {
+                              wavesurfer.pause();
+                              playBtn.textContent = '▶️';
+                          } else {
+                              wavesurfer.play();
+                              playBtn.textContent = '⏸️';
+                          }
+                      });
+                  }
+
+                  // FIXED: Track wavesurfer instance for cleanup
+                  div.wavesurfer = wavesurfer;
+                  RESOURCES.wavesurfers.set(m.id, wavesurfer);
+                  
+              } catch (error) {
+                  console.error('Failed to create waveform:', error);
+                  waveformContainer.innerHTML = '<div class="waveform-error">Waveform unavailable</div>';
+              }
+          }
+      }
   } else {
+    // ERROR STATE
     div.innerHTML = `
-      <div class="file-message">
-        <span class="file-icon">⚠️</span>
-        <span class="file-name">File not available.</span>
-      </div>
-      <div class="time-row">
-        <span>${fmtTime(m.ts)}</span>
-        ${m.type === 'sent' ? `<span class="ticks">${renderTicks(m.status)}</span>` : ''}
-      </div>
+          <div class="file-message">
+              <span class="file-icon">⚠️</span>
+              <span class="file-name">File not available.</span>
+          </div>
+          <div class="time-row">
+              <span>${fmtTime(m.ts)}</span>
+              ${m.type === 'sent' ? `<span class="ticks">${renderTicks(m.status)}</span>` : ''}
+          </div>
     `;
   }
-
+  
   return div;
 }
 
-/* // PART 8: Message Selection & Management */
-
-// ====== ADDED: SIMPLE UI SOUND HELPER (uses your three mp3 files) ======
-function playUiSound(type = 'message') {
-  let audio;
-
-  if (type === 'call') {
-    audio = new Audio('xamepage_call.mp3');
-  } else if (type === 'outgoing') {
-    audio = new Audio('xamepage_outgoing.mp3');
-  } else {
-    audio = new Audio('xamepage_message.mp3');
-  }
-
-  audio.volume = 0.5;
-  audio.play().catch(err => console.warn('Audio play blocked:', err));
-}
-// ================================================================
+/*
+// PART 8: Message Selection & Management
+*/
 
 function toggleMessageSelection(message) {
-  const id = message.id;
-  const index = selectedMessages.indexOf(id);
-  const element = messagesEl.querySelector(`.bubble[data-id="${id}"]`);
+    const id = message.id;
+    const index = selectedMessages.indexOf(id);
+    const element = messagesEl.querySelector(`.bubble[data-id="${id}"]`);
 
-  if (index > -1) {
-    selectedMessages.splice(index, 1);
-    element?.classList.remove('selected');
-
-    if (selectedMessages.length === 0) {
-      exitSelectMode();
+    if (index > -1) {
+        selectedMessages.splice(index, 1);
+        element?.classList.remove('selected');
+        
+        if (selectedMessages.length === 0) {
+            exitSelectMode();
+        }
+    } else {
+        selectedMessages.push(id);
+        element?.classList.add('selected');
+        
+        if (selectedMessages.length === 1 && !elChatHeader.querySelector('.selection-toolbar-wrapper')) {
+            enterSelectMode();
+        }
     }
-  } else {
-    selectedMessages.push(id);
-    element?.classList.add('selected');
-
-    // Play subtle UI sound on first selection
-    playUiSound('message');
-
-    if (selectedMessages.length === 1 && !elChatHeader.querySelector('.selection-toolbar-wrapper')) {
-      enterSelectMode();
-    }
-  }
-
-  updateSelectCounter();
+    updateSelectCounter();
 }
 
 function renderDeleteMenu() {
-  const count = selectedMessages.length;
-  if (count === 0) return;
-
-  const currentChat = getChat(ACTIVE_ID);
-  const hasSentMessages = selectedMessages.some(id =>
-    currentChat.find(m => m.id === id)?.type === 'sent'
-  );
-
-  const options = [
-    {
-      label: `Copy ${count} message${count === 1 ? '' : 's'}`,
-      icon: '⎘',
-      action: () => {
-        playUiSound('outgoing');
-        copyMessages(selectedMessages);
-        exitSelectMode();
-        closeDialog();
-      }
-    },
-    {
-      label: `Forward ${count} message${count === 1 ? '' : 's'}`,
-      icon: '⇥',
-      action: () => {
-        playUiSound('outgoing');
-        forwardMessages(selectedMessages);
-        exitSelectMode();
-        closeDialog();
-      }
-    },
-    {
-      label: `Delete for me (${count})`,
-      icon: '🗑',
-      action: () => {
-        if (confirm(`Are you sure you want to delete ${count} message${count === 1 ? '' : 's'} for yourself?`)) {
-          playUiSound('call');
-          deleteMessages(selectedMessages, false);
-          closeDialog();
+    const count = selectedMessages.length;
+    if (count === 0) return;
+    
+    const currentChat = getChat(ACTIVE_ID);
+    const hasSentMessages = selectedMessages.some(id => 
+        currentChat.find(m => m.id === id)?.type === 'sent'
+    );
+    
+    const options = [{
+        label: `Copy ${count} message${count === 1 ? '' : 's'}`,
+        icon: '⎘',
+        action: () => {
+            copyMessages(selectedMessages);
+            exitSelectMode();
+            closeDialog();
         }
-      }
+    }, {
+        label: `Forward ${count} message${count === 1 ? '' : 's'}`,
+        icon: '⇥',
+        action: () => {
+            forwardMessages(selectedMessages);
+            exitSelectMode();
+            closeDialog();
+        }
+    }, {
+        label: `Delete for me (${count})`,
+        icon: '🗑',
+        action: () => {
+            if (confirm(`Are you sure you want to delete ${count} message${count === 1 ? '' : 's'} for yourself?`)) { 
+                deleteMessages(selectedMessages, false);
+                closeDialog();
+            }
+        }
+    }];
+    
+    if (hasSentMessages) {
+        options.push({
+            label: `Delete for everyone (${count})`,
+            icon: '💥',
+            action: () => {
+                if (confirm(`Are you sure you want to delete ${count} message${count === 1 ? '' : 's'} for everyone?`)) { 
+                    deleteMessages(selectedMessages, true);
+                    closeDialog();
+                }
+            }
+        });
     }
-  ];
 
-  if (hasSentMessages) {
-    options.push({
-      label: `Delete for everyone (${count})`,
-      icon: '💥',
-      action: () => {
-        if (confirm(`Are you sure you want to delete ${count} message${count === 1 ? '' : 's'} for everyone?`)) {
-          playUiSound('call');
-          deleteMessages(selectedMessages, true);
-          closeDialog();
-        }
-      }
+    const wrap = document.createElement('div');
+    wrap.className = 'menu-panel dialog-like';
+    wrap.style.minWidth = '250px';
+    wrap.style.padding = '5px 0';
+    
+    const deleteBtnElement = elChatHeader.querySelector('#deleteSelectedBtn');
+    if (!deleteBtnElement) return;
+    
+    const deleteBtnRect = deleteBtnElement.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    let top = deleteBtnRect.bottom + 5;
+    let right = viewportWidth - deleteBtnRect.right;
+
+    layer.appendChild(wrap);
+    const menuRect = wrap.getBoundingClientRect();
+
+    if (top + menuRect.height > viewportHeight) {
+      top = deleteBtnRect.top - menuRect.height - 5;
+    }
+    if (right + menuRect.width > viewportWidth) {
+      right = 5;
+    }
+    
+    wrap.style.top = `${top}px`;
+    wrap.style.right = `${right}px`;
+    
+    options.forEach(opt => {
+        const item = document.createElement('div');
+        item.className = 'menu-item';
+        item.style.fontWeight = 'bold';
+        item.innerHTML = `<span style="margin-right: 10px;">${opt.icon}</span> ${escapeHtml(opt.label)}`;
+        item.addEventListener('click', opt.action);
+        wrap.appendChild(item);
     });
-  }
 
-  const wrap = document.createElement('div');
-  wrap.className = 'menu-panel dialog-like';
-  wrap.style.minWidth = '250px';
-  wrap.style.padding = '5px 0';
-
-  const deleteBtnElement = elChatHeader.querySelector('#deleteSelectedBtn');
-  if (!deleteBtnElement) return;
-
-  const deleteBtnRect = deleteBtnElement.getBoundingClientRect();
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-
-  let top = deleteBtnRect.bottom + 5;
-  let right = viewportWidth - deleteBtnRect.right;
-
-  layer.appendChild(wrap);
-  const menuRect = wrap.getBoundingClientRect();
-
-  if (top + menuRect.height > viewportHeight) {
-    top = deleteBtnRect.top - menuRect.height - 5;
-  }
-  if (right + menuRect.width > viewportWidth) {
-    right = 5;
-  }
-
-  wrap.style.top = `${top}px`;
-  wrap.style.right = `${right}px`;
-
-  options.forEach(opt => {
-    const item = document.createElement('div');
-    item.className = 'menu-item';
-    item.style.fontWeight = 'bold';
-    item.innerHTML = `<span style="margin-right: 10px;">${opt.icon}</span> ${escapeHtml(opt.label)}`;
-    item.addEventListener('click', opt.action);
-    wrap.appendChild(item);
-  });
-
-  openMenuDialog(wrap);
+    openMenuDialog(wrap);
 }
 
 function renderTicks(status) {
-  if (status === 'seen') {
-    return '✓✓';
-  } else if (status === 'delivered') {
-    return '✓✓';
-  } else {
-    return '✓';
-  }
+    if (status === 'seen') {
+        return '<span class="tick-seen">✓✓</span>';
+    } else if (status === 'delivered') {
+        return '<span class="tick-delivered">✓✓</span>';
+    } else {
+        return '<span class="tick-sent">✓</span>';
+    }
 }
 
 // FIXED: Enhanced renderMessages with proper cleanup and pagination
@@ -3693,7 +3240,7 @@ let isLoadingMoreMessages = false;
 
 function renderMessages() {
   if (!messagesEl) return;
-
+  
   // CRITICAL FIX: Clean up existing WaveSurfers BEFORE clearing DOM
   const existingBubbles = Array.from(messagesEl.querySelectorAll('.bubble'));
   existingBubbles.forEach(bubble => {
@@ -3707,7 +3254,7 @@ function renderMessages() {
       delete bubble.wavesurfer;
     }
   });
-
+  
   // Clear the resources map
   RESOURCES.wavesurfers.forEach((ws, key) => {
     try {
@@ -3719,23 +3266,23 @@ function renderMessages() {
     }
   });
   RESOURCES.wavesurfers.clear();
-
+  
   // Clear DOM
   messagesEl.innerHTML = '';
-
+  
   const msgs = getChat(ACTIVE_ID);
-
+  
   // Implement pagination for performance
   const totalMessages = msgs.length;
   const messagesToShow = Math.min(MESSAGE_PAGE_SIZE * currentMessagePage, totalMessages);
   const startIndex = Math.max(0, totalMessages - messagesToShow);
   const visibleMsgs = msgs.slice(startIndex);
-
+  
   let lastDay = '';
-
+  
   // Use DocumentFragment for better performance
   const fragment = document.createDocumentFragment();
-
+  
   visibleMsgs.forEach(m => {
     const label = dayLabel(m.ts);
     if (label !== lastDay) {
@@ -3750,9 +3297,9 @@ function renderMessages() {
     const bubble = messageBubble(m);
     fragment.appendChild(bubble);
   });
-
+  
   messagesEl.appendChild(fragment);
-
+  
   // Show load more button if there are more messages
   if (startIndex > 0 && !isLoadingMoreMessages) {
     const loadMoreBtn = document.createElement('button');
@@ -3768,154 +3315,149 @@ function renderMessages() {
       border-radius: 8px;
       cursor: pointer;
     `;
-
     loadMoreBtn.addEventListener('click', () => {
       currentMessagePage++;
       isLoadingMoreMessages = true;
       renderMessages();
       isLoadingMoreMessages = false;
     });
-
-    messagesEl.insertBefore(loadMoreBtn, messagesEl.firstChild);
+messagesEl.insertBefore(loadMoreBtn, messagesEl.firstChild);
   }
-
+  
   scrollToBottom();
 }
 
 function enterSelectMode() {
-  const toolbarHtml = `
-    <div class="selection-toolbar-wrapper">
-      <button class="icon-btn" id="exitSelectModeBtn" title="Exit selection mode">←</button>
-      <div class="counter">${selectedMessages.length} selected</div>
+    const toolbarHtml = `
+        <div class="selection-toolbar-wrapper">
+            <button class="icon-btn" id="exitSelectModeBtn" title="Exit selection mode">←</button>
+            <div class="counter">${selectedMessages.length} selected</div> 
+            <div class="toolbar">
+                <button class="icon-btn" id="copySelectedBtn" title="Copy messages">⎘</button>
+                <button class="icon-btn" id="forwardSelectedBtn" title="Forward messages">⇥</button>
+                <button class="icon-btn" id="deleteSelectedBtn" title="Delete messages">🗑</button>
+            </div>
+        </div>
+    `;
 
-      <div class="toolbar">
-        <button class="icon-btn" id="copySelectedBtn" title="Copy messages">⎘</button>
-        <button class="icon-btn" id="forwardSelectedBtn" title="Forward messages">⇥</button>
-        <button class="icon-btn" id="deleteSelectedBtn" title="Delete messages">🗑</button>
-      </div>
-    </div>
-  `;
+    elChatHeader.insertAdjacentHTML('beforeend', toolbarHtml);
 
-  elChatHeader.insertAdjacentHTML('beforeend', toolbarHtml);
+    const originalHeaderDetails = elChatHeader.querySelector('.header-details');
+    const originalToolbar = elChatHeader.querySelector('.toolbar:not(.selection-toolbar-wrapper .toolbar)'); 
+    const originalButtonGroup = elChatHeader.querySelector('.icon-btn-group'); 
+    
+    if (originalHeaderDetails) originalHeaderDetails.classList.add('hidden');
+    if (originalToolbar) originalToolbar.classList.add('hidden');
+    if (originalButtonGroup) originalButtonGroup.classList.add('hidden'); 
 
-  const originalHeaderDetails = elChatHeader.querySelector('.header-details');
-  const originalToolbar = elChatHeader.querySelector('.toolbar:not(.selection-toolbar-wrapper .toolbar)');
-  const originalButtonGroup = elChatHeader.querySelector('.icon-btn-group');
-
-  if (originalHeaderDetails) originalHeaderDetails.classList.add('hidden');
-  if (originalToolbar) originalToolbar.classList.add('hidden');
-  if (originalButtonGroup) originalButtonGroup.classList.add('hidden');
-
-  const selectionToolbarWrapper = elChatHeader.querySelector('.selection-toolbar-wrapper');
-  const newExitBtn = selectionToolbarWrapper.querySelector('#exitSelectModeBtn');
-  const newDeleteBtn = selectionToolbarWrapper.querySelector('#deleteSelectedBtn');
-  const newCopyBtn = selectionToolbarWrapper.querySelector('#copySelectedBtn');
-  const newForwardBtn = selectionToolbarWrapper.querySelector('#forwardSelectedBtn');
-
-  if (newExitBtn) {
-    newExitBtn.addEventListener('click', exitSelectMode);
-  }
-  if (newDeleteBtn) {
-    newDeleteBtn.addEventListener('click', renderDeleteMenu);
-  }
-  if (newCopyBtn) {
-    newCopyBtn.addEventListener('click', () => {
-      playUiSound('outgoing');
-      copyMessages(selectedMessages);
-      exitSelectMode();
-    });
-  }
-  if (newForwardBtn) {
-    newForwardBtn.addEventListener('click', () => {
-      playUiSound('outgoing');
-      forwardMessages(selectedMessages);
-      exitSelectMode();
-    });
-  }
+    const selectionToolbarWrapper = elChatHeader.querySelector('.selection-toolbar-wrapper');
+    const newExitBtn = selectionToolbarWrapper.querySelector('#exitSelectModeBtn');
+    const newDeleteBtn = selectionToolbarWrapper.querySelector('#deleteSelectedBtn');
+    const newCopyBtn = selectionToolbarWrapper.querySelector('#copySelectedBtn');
+    const newForwardBtn = selectionToolbarWrapper.querySelector('#forwardSelectedBtn');
+    
+    if (newExitBtn) {
+        newExitBtn.addEventListener('click', exitSelectMode);
+    }
+    if (newDeleteBtn) {
+        newDeleteBtn.addEventListener('click', renderDeleteMenu);
+    }
+    if (newCopyBtn) {
+        newCopyBtn.addEventListener('click', () => {
+            copyMessages(selectedMessages);
+            exitSelectMode();
+        });
+    }
+    if (newForwardBtn) {
+        newForwardBtn.addEventListener('click', () => {
+            forwardMessages(selectedMessages);
+            exitSelectMode();
+        });
+    }
 }
 
 function exitSelectMode() {
-  selectedMessages = [];
+    selectedMessages = [];
+    
+    elChatHeader.querySelector('.selection-toolbar-wrapper')?.remove();
 
-  elChatHeader.querySelector('.selection-toolbar-wrapper')?.remove();
-
-  const originalHeaderDetails = elChatHeader.querySelector('.header-details');
-  const originalToolbar = elChatHeader.querySelector('.toolbar:not(.selection-toolbar-wrapper .toolbar)');
-  const originalButtonGroup = elChatHeader.querySelector('.icon-btn-group');
-
-  if (originalHeaderDetails) originalHeaderDetails.classList.remove('hidden');
-  if (originalToolbar) originalToolbar.classList.remove('hidden');
-  if (originalButtonGroup) originalButtonGroup.classList.remove('hidden');
-
-  // Reset pagination when exiting select mode
-  currentMessagePage = 1;
-  renderMessages();
+    const originalHeaderDetails = elChatHeader.querySelector('.header-details');
+    const originalToolbar = elChatHeader.querySelector('.toolbar:not(.selection-toolbar-wrapper .toolbar)');
+    const originalButtonGroup = elChatHeader.querySelector('.icon-btn-group');
+    
+    if (originalHeaderDetails) originalHeaderDetails.classList.remove('hidden');
+    if (originalToolbar) originalToolbar.classList.remove('hidden');
+    if (originalButtonGroup) originalButtonGroup.classList.remove('hidden');
+    
+    // Reset pagination when exiting select mode
+    currentMessagePage = 1;
+    renderMessages();
 }
 
 function updateSelectCounter() {
-  const count = selectedMessages.length;
-  const counterEl = elChatHeader.querySelector('.selection-toolbar-wrapper .counter');
-  if (counterEl) {
-    counterEl.textContent = `${count} selected`;
-  }
+    const count = selectedMessages.length;
+    const counterEl = elChatHeader.querySelector('.selection-toolbar-wrapper .counter');
+    if (counterEl) {
+        counterEl.textContent = `${count} selected`; 
+    }
 }
 
 async function deleteMessages(messageIds, deleteForEveryone = false) {
-  if (!ACTIVE_ID || messageIds.length === 0) return;
+    if (!ACTIVE_ID || messageIds.length === 0) return;
+    
+    showNotification('Deleting messages...');
+    
+    const syncNeeded = deleteForEveryone;
+    let deletionSucceeded = !syncNeeded;
 
-  showNotification('Deleting messages...');
+    if (syncNeeded) {
+        deletionSucceeded = await syncDeletionsWithServer({
+            chat: { 
+                contactId: ACTIVE_ID, 
+                messageIds: messageIds,
+                deleteForEveryone: deleteForEveryone
+            }
+        });
+    }
 
-  const syncNeeded = deleteForEveryone;
-  let deletionSucceeded = !syncNeeded;
-
-  if (syncNeeded) {
-    deletionSucceeded = await syncDeletionsWithServer({
-      chat: {
-        contactId: ACTIVE_ID,
-        messageIds: messageIds,
-        deleteForEveryone: deleteForEveryone
-      }
-    });
-  }
-
-  if (deletionSucceeded || deleteForEveryone === false) {
-    const currentChat = getChat(ACTIVE_ID);
-    const updatedChat = currentChat.filter(m => !messageIds.includes(m.id));
-    setChat(ACTIVE_ID, updatedChat);
-
-    exitSelectMode();
-    showNotification(`${messageIds.length} message(s) deleted.`);
-  } else {
-    showNotification('Deletion failed to sync with server. Retrying...');
-  }
+    if (deletionSucceeded || deleteForEveryone === false) { 
+        const currentChat = getChat(ACTIVE_ID);
+        const updatedChat = currentChat.filter(m => !messageIds.includes(m.id));
+        setChat(ACTIVE_ID, updatedChat);
+        
+        exitSelectMode(); 
+        
+        showNotification(`${messageIds.length} message(s) deleted.`);
+    } else {
+        showNotification('Deletion failed to sync with server. Retrying...');
+    }
 }
 
 function copyMessages(messageIds) {
-  const chat = getChat(ACTIVE_ID);
-  const messagesToCopy = chat
-    .filter(m => messageIds.includes(m.id))
-    .map(m => m.text || '[Attachment]');
-
-  if (messagesToCopy.length > 0) {
-    const textToCopy = messagesToCopy.join('\n\n');
-
-    navigator.clipboard.writeText(textToCopy).then(() => {
-      showNotification('Messages copied!');
-    }).catch(err => {
-      console.error('Failed to copy messages:', err);
-      showNotification('Failed to copy messages.');
-    });
-  }
+    const chat = getChat(ACTIVE_ID);
+    const messagesToCopy = chat
+        .filter(m => messageIds.includes(m.id))
+        .map(m => m.text || '[Attachment]');
+    
+    if (messagesToCopy.length > 0) {
+        const textToCopy = messagesToCopy.join('\n\n');
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            showNotification('Messages copied!');
+        }).catch(err => {
+            console.error('Failed to copy messages:', err);
+            showNotification('Failed to copy messages.');
+        });
+    }
 }
 
 function forwardMessages(messageIds) {
-  const chat = getChat(ACTIVE_ID);
-  const messagesToForward = chat.filter(m => messageIds.includes(m.id));
-  const messageCount = messagesToForward.length;
-
-  if (messageCount > 0) {
-    showNotification(`Ready to forward ${messageCount} message${messageCount === 1 ? '' : 's'}.`);
-  }
+    const chat = getChat(ACTIVE_ID);
+    const messagesToForward = chat.filter(m => messageIds.includes(m.id));
+    const messageCount = messagesToForward.length;
+    
+    if (messageCount > 0) {
+        showNotification(`Ready to forward ${messageCount} message${messageCount === 1 ? '' : 's'}.`);
+    }
 }
 
 /*
@@ -5139,15 +4681,16 @@ function connectSocket() {
     
     console.log('Creating new socket connection...');
     socket = io(serverURL, {
-        query: { userId: USER.xameId },
-        reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        randomizationFactor: 0.5,
-        timeout: 10000,
-        transports: ['websocket', 'polling']
-    });
+    query: { userId: USER.xameId },
+    reconnection: true,
+    reconnectionAttempts: 5,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    randomizationFactor: 0.5,
+    timeout: 10000,
+    transports: ['websocket', 'polling'],
+    path: '/socket.io/'  // Add this line
+});
 
     socket.on('connect', () => {
         console.log('✅ Connected to server!');
@@ -5368,9 +4911,6 @@ function connectSocket() {
     });
 
     socket.on('receive-message', (data) => {
-
-// 🔊 Play message notification sound
-  playSound('message');
         console.log('Received message:', data);
         
         if (!data || !data.senderId || !data.message) {
