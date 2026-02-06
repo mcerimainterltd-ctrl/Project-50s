@@ -7,9 +7,9 @@
 //
 
 // ===== CRITICAL: Debugging block for troubleshooting =====
-console.log('🎯 XamePage script START');
+console.log(' XamePage script START');
 window.addEventListener('error', (e) => {
-    console.error('🔴 CRITICAL ERROR:', e.message, e.filename, e.lineno);
+    console.error(' CRITICAL ERROR:', e.message, e.filename, e.lineno);
 });
 // ===== End debugging block =====
 
@@ -77,35 +77,35 @@ const persistentStorage = {
 
 // Initialize memory storage from persistent storage on boot
 function initializeMemoryFromPersistent() {
-  console.log('🔄 Initializing memory storage from persistent storage...');
+  console.log(' Initializing memory storage from persistent storage...');
   
   try {
     // Load user
     const user = persistentStorage.get(KEYS.user);
     if (user) {
       memoryStorage.set(KEYS.user, user);
-      console.log('✅ Loaded user from persistent storage');
+      console.log(' Loaded user from persistent storage');
     }
     
     // Load contacts
     const contacts = persistentStorage.get(KEYS.contacts, []);
     memoryStorage.set(KEYS.contacts, contacts);
-    console.log(`✅ Loaded ${contacts.length} contacts from persistent storage`);
+    console.log(` Loaded ${contacts.length} contacts from persistent storage`);
     
     // Load drafts
     const drafts = persistentStorage.get(KEYS.drafts, {});
     memoryStorage.set(KEYS.drafts, drafts);
-    console.log(`✅ Loaded ${Object.keys(drafts).length} drafts from persistent storage`);
+    console.log(` Loaded ${Object.keys(drafts).length} drafts from persistent storage`);
     
     // Load settings
     const settings = persistentStorage.get(KEYS.settings, {});
     memoryStorage.set(KEYS.settings, settings);
-    console.log('✅ Loaded settings from persistent storage');
+    console.log(' Loaded settings from persistent storage');
     
     // Note: Chat histories are loaded on-demand to avoid memory bloat
     
   } catch (error) {
-    console.error('❌ Failed to initialize memory from persistent storage:', error);
+    console.error(' Failed to initialize memory from persistent storage:', error);
   }
 }
 
@@ -204,7 +204,7 @@ const storage = {
   },
   
   syncToPersistent() {
-    console.log('🔄 Syncing all memory data to persistent storage...');
+    console.log(' Syncing all memory data to persistent storage...');
     let syncedCount = 0;
     
     try {
@@ -214,16 +214,16 @@ const storage = {
           syncedCount++;
         }
       }
-      console.log(`✅ Synced ${syncedCount} items to persistent storage`);
+      console.log(` Synced ${syncedCount} items to persistent storage`);
       return syncedCount;
     } catch (error) {
-      console.error('❌ Sync to persistent storage failed:', error);
+      console.error(' Sync to persistent storage failed:', error);
       return 0;
     }
   },
   
   syncFromPersistent() {
-    console.log('🔄 Syncing from persistent storage to memory...');
+    console.log(' Syncing from persistent storage to memory...');
     return initializeMemoryFromPersistent();
   },
   
@@ -625,12 +625,12 @@ const elChatHeaderButtonGroup = $('#chat .header .icon-btn-group');
 const selectToolbar = document.createElement('div');
 selectToolbar.className = 'select-toolbar hidden';
 selectToolbar.innerHTML = `
-    <button class="icon-btn" id="exitSelectModeBtn">←</button>
+    <button class="icon-btn" id="exitSelectModeBtn"></button>
     <div class="counter">0</div>
     <div class="toolbar">
-      <button class="icon-btn" id="deleteSelectedBtn" title="Delete messages">🗑</button>
-      <button class="icon-btn" id="copySelectedBtn" title="Copy messages">⎘</button>
-      <button class="icon-btn" id="forwardSelectedBtn" title="Forward messages">⇥</button>
+      <button class="icon-btn" id="deleteSelectedBtn" title="Delete messages"></button>
+      <button class="icon-btn" id="copySelectedBtn" title="Copy messages"></button>
+      <button class="icon-btn" id="forwardSelectedBtn" title="Forward messages"></button>
     </div>
 `;
 
@@ -685,16 +685,16 @@ let speechRecognizer = null;
 
 // ===== Enhanced File Icon Function =====
 function getFileIcon(fileType, fileName = '') {
-    if (fileType.startsWith('image/')) return '🖼️';
-    else if (fileType.startsWith('video/')) return '📹';
-    else if (fileType.startsWith('audio/')) return '🎵';
-    else if (fileType === 'application/pdf') return '📄';
-    else if (fileType === 'application/msword' || fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return '📝';
-    else if (fileType === 'application/vnd.ms-excel' || fileType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') return '📊';
-    else if (fileType === 'application/vnd.ms-powerpoint' || fileType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') return '📋';
-    else if (fileType === 'text/plain') return '📜';
-    else if (fileName.endsWith('.zip') || fileName.endsWith('.rar')) return '🗜️';
-    return '📁';
+    if (fileType.startsWith('image/')) return '';
+    else if (fileType.startsWith('video/')) return '';
+    else if (fileType.startsWith('audio/')) return '';
+    else if (fileType === 'application/pdf') return '';
+    else if (fileType === 'application/msword' || fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return '';
+    else if (fileType === 'application/vnd.ms-excel' || fileType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') return '';
+    else if (fileType === 'application/vnd.ms-powerpoint' || fileType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') return '';
+    else if (fileType === 'text/plain') return '';
+    else if (fileName.endsWith('.zip') || fileName.endsWith('.rar')) return '';
+    return '';
 }
 
 function formatDuration(seconds) {
@@ -709,7 +709,7 @@ function openImageFullscreen(imageUrl, imageName) {
     overlay.className = 'fullscreen-image-overlay';
     overlay.innerHTML = `
         <div class="fullscreen-image-container">
-            <button class="close-fullscreen-btn">✕</button>
+            <button class="close-fullscreen-btn"></button>
             <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(imageName)}">
             <div class="image-actions">
                 <a href="${escapeHtml(imageUrl)}" download="${escapeHtml(imageName)}" class="btn secondary">Download</a>
@@ -794,7 +794,7 @@ function handleUploadError(msgId, errorMessage) {
     const chatToUpdate = getChat(ACTIVE_ID);
     const msgIndex = chatToUpdate.findIndex(m => m.id === msgId);
     if (msgIndex !== -1) {
-        chatToUpdate[msgIndex].text = 'Upload failed ⚠️';
+        chatToUpdate[msgIndex].text = 'Upload failed ';
         chatToUpdate[msgIndex].isPending = false;
         chatToUpdate[msgIndex].uploadProgress = 0;
         setChat(ACTIVE_ID, chatToUpdate);
@@ -880,13 +880,13 @@ function createCameraModal() {
                 <div class="camera-header-controls">
                     <div class="screen-size-toggle">
                         <button class="size-toggle-btn ${currentCameraMode === 'thumbnail' ? 'active' : ''}" data-mode="thumbnail" title="Thumbnail">
-                            <span class="btn-icon">🗔</span>
+                            <span class="btn-icon"></span>
                         </button>
                         <button class="size-toggle-btn ${currentCameraMode === 'halfscreen' ? 'active' : ''}" data-mode="halfscreen" title="Half Screen">
-                            <span class="btn-icon">⧉</span>
+                            <span class="btn-icon"></span>
                         </button>
                         <button class="size-toggle-btn ${currentCameraMode === 'fullscreen' ? 'active' : ''}" data-mode="fullscreen" title="Full Screen">
-                            <span class="btn-icon">⛶</span>
+                            <span class="btn-icon"></span>
                         </button>
                     </div>
                     <button class="close-camera">&times;</button>
@@ -903,21 +903,21 @@ function createCameraModal() {
             <div class="camera-controls">
                 <div class="camera-primary-controls">
                     <button id="camera-switch-camera" class="camera-btn switch-btn">
-                        <span class="btn-icon">🔄</span>
+                        <span class="btn-icon"></span>
                         <span class="btn-text">Switch</span>
                     </button>
                     <button id="camera-capture-btn" class="camera-btn capture-btn">
-                        <span class="btn-icon">📸</span>
+                        <span class="btn-icon"></span>
                         <span class="btn-text">Photo</span>
                     </button>
                     <button id="camera-start-recording" class="camera-btn record-btn">
-                        <span class="btn-icon">⏺️</span>
+                        <span class="btn-icon"></span>
                         <span class="btn-text">Record</span>
                     </button>
                 </div>
                 <div class="camera-secondary-controls">
                     <button id="camera-stop-recording" class="camera-btn stop-btn" disabled>
-                        <span class="btn-icon">⏹️</span>
+                        <span class="btn-icon"></span>
                         <span class="btn-text">Stop</span>
                     </button>
                 </div>
@@ -991,7 +991,7 @@ function setupCameraButton() {
         // Fallback: look for camera icon or text in the more options dropdown
         const cameraOption = document.createElement('div');
         cameraOption.className = 'menu-item';
-        cameraOption.innerHTML = '📷 Camera';
+        cameraOption.innerHTML = ' Camera';
         cameraOption.addEventListener('click', openCamera);
         
         const moreOptionsDropdown = document.getElementById('more-options-dropdown');
@@ -1524,7 +1524,7 @@ const toggleMic = () => {
     isAudioMuted = !isAudioMuted;
     localStream.getAudioTracks().forEach(track => track.enabled = !isAudioMuted);
     micMuteBtn.classList.toggle('active', !isAudioMuted);
-    micMuteBtn.textContent = isAudioMuted ? '🔇' : '🎙️';
+    micMuteBtn.textContent = isAudioMuted ? '' : '';
 };
 
 const toggleCamera = () => {
@@ -1532,7 +1532,7 @@ const toggleCamera = () => {
     isVideoMuted = !isVideoMuted;
     localStream.getVideoTracks().forEach(track => track.enabled = !isVideoMuted);
     cameraMuteBtn.classList.toggle('active', !isVideoMuted);
-    cameraMuteBtn.textContent = isVideoMuted ? '📷' : '📹';
+    cameraMuteBtn.textContent = isVideoMuted ? '' : '';
 };
 
 const toggleLoudspeaker = () => {
@@ -1546,7 +1546,7 @@ const toggleLoudspeaker = () => {
         }
     }
     loudSpeakerBtn.classList.toggle('active', isLoudspeakerOn);
-    loudSpeakerBtn.textContent = isLoudspeakerOn ? '🔊' : '🔈';
+    loudSpeakerBtn.textContent = isLoudspeakerOn ? '' : '';
 };
 
 const toggleFrontBackCamera = async () => {
@@ -1603,7 +1603,7 @@ const incomingCallOverlay = $('#incomingCallOverlay');
 const acceptCallBtn = $('#acceptCallBtn');
 const declineCallBtn = $('#declineCallBtn');
 
-// ✅ FIXED: Parameter name was broken across lines
+//  FIXED: Parameter name was broken across lines
 function showIncomingCallNotification(caller, callType, offer) {
     const localContact = CONTACTS.find(c => c.id === caller.xameId);
     
@@ -1999,7 +1999,7 @@ function contactRow(c) {
                         : addCacheBuster(c.profilePic);
 
   const lastText = c.lastInteractionPreview || 'Hey there I\'m on XamePage';
-  const lastTime = c.lastInteractionTs ? (dayLabel(c.lastInteractionTs) + ' · ' + fmtTime(c.lastInteractionTs)) : '';
+  const lastTime = c.lastInteractionTs ? (dayLabel(c.lastInteractionTs) + ' � ' + fmtTime(c.lastInteractionTs)) : '';
 
   const div = document.createElement('div');
   div.className = 'item fade-in';
@@ -2399,7 +2399,7 @@ function openChat(id) {
 
     elChatHeader.innerHTML = `
       <div class="icon-btn-group">
-          <button class="icon-btn" id="backBtn">←</button>
+          <button class="icon-btn" id="backBtn"></button>
       </div>
       <div class="header-details">
           <div class="avatar-container chat-header">
@@ -2412,13 +2412,13 @@ function openChat(id) {
               </div>
               <p class="xame-id" id="contactIdDisplay"></p>
               <span id="chatSub"></span>
-              <span id="typing" class="typing hidden">typing…</span>
+              <span id="typing" class="typing hidden">typing�</span>
           </div>
       </div>
       <div class="toolbar">
           <div class="menu" id="chatMoreMenu">
               <button class="icon-btn" id="chatMoreBtn" aria-haspopup="menu" aria-expanded="false" title="More options">
-                  ⋮
+                  
               </button>
           </div>
       </div>
@@ -2489,11 +2489,11 @@ function renderChatMoreMenu() {
     const wrap = document.createElement('div');
     wrap.className = 'menu-panel dialog-like';
     wrap.innerHTML = `
-        <div class="menu-item" id="voiceCallBtn">📞 Voice Call</div>
-        <div class="menu-item" id="videoCallBtn">📹 Video Call</div>
-        <div class="menu-item" id="editContactBtn">✍️ Edit Contact Name</div>
-        <div class="menu-item" id="clearChatBtn">🗑 Clear Chat</div>
-        <div class="menu-item" id="deleteContactBtn">❌ Delete Contact</div>
+        <div class="menu-item" id="voiceCallBtn"> Voice Call</div>
+        <div class="menu-item" id="videoCallBtn"> Video Call</div>
+        <div class="menu-item" id="editContactBtn"> Edit Contact Name</div>
+        <div class="menu-item" id="clearChatBtn"> Clear Chat</div>
+        <div class="menu-item" id="deleteContactBtn"> Delete Contact</div>
     `;
 
     const chatMoreBtn = $('#chatMoreBtn');
@@ -2900,7 +2900,7 @@ function messageBubble(m) {
       div.innerHTML = `
           <div>${escapeHtml(m.text)}</div>
           <div class="time-row">
-              <button class="icon-btn speak-btn">🔊</button>
+              <button class="icon-btn speak-btn"></button>
               <span>${fmtTime(m.ts)}</span>
               ${m.type === 'sent' ? `<span class="ticks">${renderTicks(m.status)}</span>` : ''}
           </div>
@@ -2920,7 +2920,7 @@ function messageBubble(m) {
       // FIXED: Proper file URL construction
       let fileUrl = constructFileUrl(m.file.url);
       
-      console.log('🔗 File URL:', {
+      console.log(' File URL:', {
           original: m.file.url,
           constructed: fileUrl
       });
@@ -2934,7 +2934,7 @@ function messageBubble(m) {
               <div class="image-preview" data-url="${escapeHtml(fileUrl)}">
                   <img src="${escapeHtml(fileUrl)}" alt="${escapeHtml(fileName)}" loading="lazy">
                   <div class="image-overlay">
-                      <button class="view-fullscreen-btn">🔍 View</button>
+                      <button class="view-fullscreen-btn"> View</button>
                   </div>
               </div>
           `;
@@ -2962,9 +2962,9 @@ function messageBubble(m) {
                       <div class="waveform-loading">Loading waveform...</div>
                   </div>
                   <div class="audio-controls">
-                      <button class="audio-play-btn" data-audio-id="${audioId}">▶️</button>
+                      <button class="audio-play-btn" data-audio-id="${audioId}"></button>
                       <span class="audio-time">0:00</span>
-                      <a href="${escapeHtml(fileUrl)}" download="${escapeHtml(fileName)}" class="download-btn" title="Download">⬇️</a>
+                      <a href="${escapeHtml(fileUrl)}" download="${escapeHtml(fileName)}" class="download-btn" title="Download"></a>
                   </div>
               </div>
           `;
@@ -2979,7 +2979,7 @@ function messageBubble(m) {
                       <span class="doc-name">${escapeHtml(fileName)}</span>
                       <span class="doc-type">${escapeHtml(fileType.split('/')[1]?.toUpperCase() || 'FILE')}</span>
                   </div>
-                  <button class="doc-download-btn" title="Download">⬇️</button>
+                  <button class="doc-download-btn" title="Download"></button>
               </a>
           `;
       }
@@ -3063,7 +3063,7 @@ function messageBubble(m) {
 
                   wavesurfer.on('finish', () => {
                       if (playBtn) {
-                          playBtn.textContent = '▶️';
+                          playBtn.textContent = '';
                       }
                   });
 
@@ -3072,10 +3072,10 @@ function messageBubble(m) {
                           e.stopPropagation();
                           if (wavesurfer.isPlaying()) {
                               wavesurfer.pause();
-                              playBtn.textContent = '▶️';
+                              playBtn.textContent = '';
                           } else {
                               wavesurfer.play();
-                              playBtn.textContent = '⏸️';
+                              playBtn.textContent = '';
                           }
                       });
                   }
@@ -3094,7 +3094,7 @@ function messageBubble(m) {
     // ERROR STATE
     div.innerHTML = `
           <div class="file-message">
-              <span class="file-icon">⚠️</span>
+              <span class="file-icon"></span>
               <span class="file-name">File not available.</span>
           </div>
           <div class="time-row">
@@ -3145,7 +3145,7 @@ function renderDeleteMenu() {
     
     const options = [{
         label: `Copy ${count} message${count === 1 ? '' : 's'}`,
-        icon: '⎘',
+        icon: '',
         action: () => {
             copyMessages(selectedMessages);
             exitSelectMode();
@@ -3153,7 +3153,7 @@ function renderDeleteMenu() {
         }
     }, {
         label: `Forward ${count} message${count === 1 ? '' : 's'}`,
-        icon: '⇥',
+        icon: '',
         action: () => {
             forwardMessages(selectedMessages);
             exitSelectMode();
@@ -3161,7 +3161,7 @@ function renderDeleteMenu() {
         }
     }, {
         label: `Delete for me (${count})`,
-        icon: '🗑',
+        icon: '',
         action: () => {
             if (confirm(`Are you sure you want to delete ${count} message${count === 1 ? '' : 's'} for yourself?`)) { 
                 deleteMessages(selectedMessages, false);
@@ -3173,7 +3173,7 @@ function renderDeleteMenu() {
     if (hasSentMessages) {
         options.push({
             label: `Delete for everyone (${count})`,
-            icon: '💥',
+            icon: '',
             action: () => {
                 if (confirm(`Are you sure you want to delete ${count} message${count === 1 ? '' : 's'} for everyone?`)) { 
                     deleteMessages(selectedMessages, true);
@@ -3225,11 +3225,11 @@ function renderDeleteMenu() {
 
 function renderTicks(status) {
     if (status === 'seen') {
-        return '<span class="tick-seen">✓✓</span>';
+        return '<span class="tick-seen"></span>';
     } else if (status === 'delivered') {
-        return '<span class="tick-delivered">✓✓</span>';
+        return '<span class="tick-delivered"></span>';
     } else {
-        return '<span class="tick-sent">✓</span>';
+        return '<span class="tick-sent"></span>';
     }
 }
 
@@ -3330,12 +3330,12 @@ messagesEl.insertBefore(loadMoreBtn, messagesEl.firstChild);
 function enterSelectMode() {
     const toolbarHtml = `
         <div class="selection-toolbar-wrapper">
-            <button class="icon-btn" id="exitSelectModeBtn" title="Exit selection mode">←</button>
+            <button class="icon-btn" id="exitSelectModeBtn" title="Exit selection mode"></button>
             <div class="counter">${selectedMessages.length} selected</div> 
             <div class="toolbar">
-                <button class="icon-btn" id="copySelectedBtn" title="Copy messages">⎘</button>
-                <button class="icon-btn" id="forwardSelectedBtn" title="Forward messages">⇥</button>
-                <button class="icon-btn" id="deleteSelectedBtn" title="Delete messages">🗑</button>
+                <button class="icon-btn" id="copySelectedBtn" title="Copy messages"></button>
+                <button class="icon-btn" id="forwardSelectedBtn" title="Forward messages"></button>
+                <button class="icon-btn" id="deleteSelectedBtn" title="Delete messages"></button>
             </div>
         </div>
     `;
@@ -3878,13 +3878,13 @@ if (saveProfileBtn) {
             const isDefaultPic = currentPreviewSrc.includes('default.png');
             
             if (isRemoveProfilePicClicked) {
-                console.log('🗑️ Profile removal requested.');
+                console.log(' Profile removal requested.');
                 formData.append("removeProfilePic", "true");
                 isRemoveProfilePicClicked = false;
                 closeCropModal(); 
             } 
             else if (currentPreviewSrc.startsWith('data:image/')) {
-                console.log('🖼️ Detecting new image from preview source...');
+                console.log(' Detecting new image from preview source...');
                 
                 try {
                     const blob = await fetch(currentPreviewSrc).then(res => res.blob());
@@ -3894,32 +3894,32 @@ if (saveProfileBtn) {
                     }
 
                     formData.append("profilePic", blob, "profile_pic.jpg");
-                    console.log('✅ New profile pic blob added to FormData.');
+                    console.log(' New profile pic blob added to FormData.');
                 } catch (blobError) {
                     console.error('Failed to process image blob:', blobError);
                     throw new Error('Failed to process profile picture');
                 }
             } 
             else {
-                console.log('ℹ️ No change to profile picture.');
+                console.log(' No change to profile picture.');
             }
 
             closeCropModal();
 
-            console.log('📤 Sending to:', `${serverURL}/api/update-profile`);
+            console.log(' Sending to:', `${serverURL}/api/update-profile`);
             const response = await fetch(`${serverURL}/api/update-profile`, {
                 method: 'POST',
                 body: formData
             });
 
-            console.log('📥 Response status:', response.status, response.statusText);
+            console.log(' Response status:', response.status, response.statusText);
             
             if (!response.ok) {
                 throw new Error(`Server error: ${response.status} ${response.statusText}`);
             }
             
             const result = await response.json();
-            console.log('📥 Server response:', result);
+            console.log(' Server response:', result);
 
             if (result.success) {
                 showNotification("Profile saved successfully!");
@@ -3933,21 +3933,21 @@ if (saveProfileBtn) {
                 if (result.profilePicUrl) {
                     const newUrl = addCacheBuster(result.profilePicUrl);
                     
-                    console.log('📸 New profile picture URL:', newUrl);
+                    console.log(' New profile picture URL:', newUrl);
                     
                     profilePicPreview.src = newUrl;
                     profilePicPreview.onerror = function() {
-                        console.error('❌ Failed to load new profile picture');
+                        console.error(' Failed to load new profile picture');
                         this.src = `${serverURL}/media/profile_pics/default.png`;
                         USER.profilePic = '';
                     };
                     profilePicPreview.onload = function() {
-                        console.log('✅ Profile picture loaded successfully');
+                        console.log(' Profile picture loaded successfully');
                     };
                     
                     USER.profilePic = newUrl;
                 } else {
-                    console.log('ℹ️ No profile picture URL in response');
+                    console.log(' No profile picture URL in response');
                     profilePicPreview.src = `${serverURL}/media/profile_pics/default.png`;
                     USER.profilePic = '';
                 }
@@ -3964,15 +3964,15 @@ if (saveProfileBtn) {
                     storage.set(KEYS.contacts, CONTACTS);
                 }
                 
-                console.log('💾 Profile save complete');
+                console.log(' Profile save complete');
                 show(elContacts);
                 debouncedRenderContacts();
             } else {
-                console.error('❌ Save failed:', result.message);
+                console.error(' Save failed:', result.message);
                 showNotification("Failed to save profile: " + (result.message || "Unknown error."));
             }
         } catch (err) {
-            console.error("❌ Profile save error:", err);
+            console.error(" Profile save error:", err);
             showNotification("Error saving profile: " + err.message);
         } finally {
             saveProfileBtn.textContent = 'Save Changes';
@@ -4119,7 +4119,7 @@ if (fileInput) {
       const file = e.target.files[0];
       if (!file) return;
       
-      console.log('📎 File selected:', {
+      console.log(' File selected:', {
           name: file.name,
           type: file.type,
           size: file.size
@@ -4155,14 +4155,14 @@ function sendFile(file) {
         return;
     }
     
-    console.log('📤 Starting file upload:', file.name);
+    console.log(' Starting file upload:', file.name);
     
     const msgId = uid();
     const ts = now();
     
     const pendingMsg = {
         id: msgId,
-        text: `📎 Uploading ${file.name}...`,
+        text: ` Uploading ${file.name}...`,
         type: 'sent',
         ts: ts,
         status: 'sending',
@@ -4182,7 +4182,7 @@ function sendFile(file) {
     formData.append('recipientId', ACTIVE_ID);
     formData.append('messageId', msgId);
     
-    console.log('📤 Uploading to server...');
+    console.log(' Uploading to server...');
     
     const xhr = new XMLHttpRequest();
     currentUpload = xhr;
@@ -4201,7 +4201,7 @@ function sendFile(file) {
         if (xhr.status === 200) {
             try {
                 const data = JSON.parse(xhr.responseText);
-                console.log('✅ Upload response:', data);
+                console.log(' Upload response:', data);
                 
                 if (data.success && data.url) {
                     const chatToUpdate = getChat(ACTIVE_ID);
@@ -4224,7 +4224,7 @@ function sendFile(file) {
                         setChat(ACTIVE_ID, chatToUpdate);
                         renderMessages();
 
-                        console.log('📨 Sending file message via socket...');
+                        console.log(' Sending file message via socket...');
                         
                         // FIXED: Using correct socket event
                         if (socket) {
@@ -4237,7 +4237,7 @@ function sendFile(file) {
                                     chatToUpdate[msgIndex].status = 'delivered';
                                     setChat(ACTIVE_ID, chatToUpdate);
                                     renderMessages();
-                                    console.log('✅ File message delivered successfully');
+                                    console.log(' File message delivered successfully');
                                     showNotification('File sent successfully!');
                                 } else {
                                     console.error("Socket delivery failed:", response?.message);
@@ -4250,11 +4250,11 @@ function sendFile(file) {
                     throw new Error(data.message || 'Upload failed - no URL returned');
                 }
             } catch (error) {
-                console.error('❌ Failed to parse upload response:', error);
+                console.error(' Failed to parse upload response:', error);
                 handleUploadError(msgId, error.message);
             }
         } else {
-            console.error('❌ Upload failed with status:', xhr.status);
+            console.error(' Upload failed with status:', xhr.status);
             handleUploadError(msgId, `Server error: ${xhr.status}`);
         }
         
@@ -4262,14 +4262,14 @@ function sendFile(file) {
     });
     
     xhr.addEventListener('error', function() {
-        console.error('❌ Network error during upload');
+        console.error(' Network error during upload');
         removeUploadProgress(msgId);
         handleUploadError(msgId, 'Network error during upload');
         currentUpload = null;
     });
     
     xhr.addEventListener('abort', function() {
-        console.log('⚠️ Upload cancelled by user');
+        console.log(' Upload cancelled by user');
         removeUploadProgress(msgId);
         const chatToUpdate = getChat(ACTIVE_ID);
         const msgIndex = chatToUpdate.findIndex(m => m.id === msgId);
@@ -4292,7 +4292,7 @@ function sendFile(file) {
 
 if (micBtn) {
     micBtn.addEventListener('click', () => {
-        console.log('🎙️ Voice note mode activated');
+        console.log(' Voice note mode activated');
         if (messageInput) messageInput.classList.add('hidden');
         if (sendBtn) sendBtn.classList.add('hidden');
         if (attachBtn) attachBtn.classList.add('hidden');
@@ -4314,7 +4314,7 @@ function resetVoiceRecorderUI() {
 if (recordBtn) {
     recordBtn.addEventListener('click', async () => {
         try {
-            console.log('🎙️ Starting audio recording...');
+            console.log(' Starting audio recording...');
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             
             // FIXED: Better format detection
@@ -4330,7 +4330,7 @@ if (recordBtn) {
                 type === '' || MediaRecorder.isTypeSupported(type)
             );
             
-            console.log('📊 Using MIME type:', mimeType || 'browser default');
+            console.log(' Using MIME type:', mimeType || 'browser default');
             
             const options = mimeType ? { mimeType } : {};
             mediaRecorder = new MediaRecorder(stream, options);
@@ -4344,29 +4344,29 @@ if (recordBtn) {
             
             mediaRecorder.ondataavailable = (event) => {
                 if (event.data.size > 0) {
-                    console.log("📊 Audio data chunk:", event.data.size, "bytes");
+                    console.log(" Audio data chunk:", event.data.size, "bytes");
                     audioChunks.push(event.data);
                 }
             };
             
             mediaRecorder.onstop = () => {
-                console.log("⏹️ Recording stopped. Total chunks:", audioChunks.length);
+                console.log(" Recording stopped. Total chunks:", audioChunks.length);
                 
                 if (audioChunks.length > 0) {
                     audioBlob = new Blob(audioChunks, { type: mimeType || 'audio/webm' });
-                    console.log("✅ Audio Blob created:", audioBlob.size, "bytes, type:", audioBlob.type);
+                    console.log(" Audio Blob created:", audioBlob.size, "bytes, type:", audioBlob.type);
                     
                     if (audioBlob.size > 0) {
                         if (playBtn) playBtn.classList.remove('hidden');
                         if (sendVoiceBtn) sendVoiceBtn.classList.remove('hidden');
                         if (stopRecordBtn) stopRecordBtn.classList.add('hidden');
                     } else {
-                        console.error("❌ Audio Blob is empty");
+                        console.error(" Audio Blob is empty");
                         showNotification("Recording failed. Please try again.");
                         resetVoiceRecorderUI();
                     }
                 } else {
-                    console.error("❌ No audio chunks recorded");
+                    console.error(" No audio chunks recorded");
                     showNotification("No audio was captured. Please try again.");
                     resetVoiceRecorderUI();
                 }
@@ -4375,10 +4375,10 @@ if (recordBtn) {
             };
             
             mediaRecorder.start();
-            console.log("🔴 Recording started...");
+            console.log(" Recording started...");
 
         } catch (err) {
-            console.error('❌ Recording failed:', err);
+            console.error(' Recording failed:', err);
             showNotification('Could not start recording. Check microphone permissions.');
             resetVoiceRecorderUI();
         }
@@ -4388,7 +4388,7 @@ if (recordBtn) {
 if (stopRecordBtn) {
     stopRecordBtn.addEventListener('click', () => {
         if (mediaRecorder && mediaRecorder.state === 'recording') {
-            console.log('⏹️ Stopping recording...');
+            console.log(' Stopping recording...');
             mediaRecorder.stop();
         }
     });
@@ -4397,7 +4397,7 @@ if (stopRecordBtn) {
 if (playBtn) {
     playBtn.addEventListener('click', () => {
         if (audioBlob) {
-            console.log('▶️ Playing recorded audio...');
+            console.log(' Playing recorded audio...');
             const audioUrl = URL.createObjectURL(audioBlob);
             const audio = new Audio(audioUrl);
             audio.play();
@@ -4415,7 +4415,7 @@ if (playBtn) {
 if (sendVoiceBtn) {
     sendVoiceBtn.addEventListener('click', () => {
         if (audioBlob && audioBlob.size > 0) {
-            console.log('📤 Sending voice note...');
+            console.log(' Sending voice note...');
             const timestamp = Date.now();
             
             // Determine file extension based on blob type
@@ -4438,7 +4438,7 @@ if (sendVoiceBtn) {
             audioBlob = null;
             audioChunks = [];
         } else {
-            console.error("❌ Cannot send empty audio blob");
+            console.error(" Cannot send empty audio blob");
             showNotification("No audio to send. Please record again.");
             resetVoiceRecorderUI();
         }
@@ -4448,7 +4448,7 @@ if (sendVoiceBtn) {
 // Speech-to-text button
 const speechToTextBtn = document.createElement('button');
 speechToTextBtn.className = 'icon-btn voice-text-btn';
-speechToTextBtn.innerHTML = '🎙';
+speechToTextBtn.innerHTML = '';
 speechToTextBtn.title = 'Voice to text';
 
 speechToTextBtn.addEventListener('click', () => {
@@ -4468,12 +4468,12 @@ speechToTextBtn.addEventListener('click', () => {
     speechRecognizer.lang = 'en-US';
     
     speechRecognizer.onstart = () => {
-        speechToTextBtn.innerHTML = '🔴';
+        speechToTextBtn.innerHTML = '';
         if (messageInput) messageInput.placeholder = 'Listening...';
     };
     
     speechRecognizer.onend = () => {
-        speechToTextBtn.innerHTML = '🎙';
+        speechToTextBtn.innerHTML = '';
         if (messageInput) messageInput.placeholder = 'Type a message...';
     };
     
@@ -4488,7 +4488,7 @@ speechToTextBtn.addEventListener('click', () => {
     
     speechRecognizer.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
-        speechToTextBtn.innerHTML = '🎙';
+        speechToTextBtn.innerHTML = '';
         if (messageInput) messageInput.placeholder = 'Type a message...';
         showNotification('Error with voice input. Try again.');
     };
@@ -4693,7 +4693,7 @@ function connectSocket() {
 });
 
     socket.on('connect', () => {
-        console.log('✅ Connected to server!');
+        console.log(' Connected to server!');
         showNotification('Connected to server');
         
         setTimeout(() => {
@@ -5200,7 +5200,7 @@ window.addEventListener('unhandledrejection', (event) => {
 
 // FIXED: Separate event listener setup
 function setupEventListeners() {
-  console.log('🔧 Setting up event listeners...');
+  console.log(' Setting up event listeners...');
   
   if (clearAllChatsBtn) {
       clearAllChatsBtn.addEventListener('click', clearAllChats);
@@ -5282,7 +5282,7 @@ function setupEventListeners() {
       loginForm.addEventListener('submit', async (e) => {
           e.preventDefault();
           
-          console.log('📝 Login form submitted');
+          console.log(' Login form submitted');
           
           if (!loginXameIdInput) {
               console.error('Login input not found');
@@ -5296,7 +5296,7 @@ function setupEventListeners() {
               return;
           }
           
-          console.log('🔐 Attempting login for:', xameId);
+          console.log(' Attempting login for:', xameId);
           
           try {
               const checkResponse = await fetch(`${serverURL}/api/get-user-name`, {
@@ -5343,13 +5343,13 @@ function setupEventListeners() {
               const loginResult = await loginResponse.json();
 
               if (loginResult.success) {
-                  console.log('✅ Login successful');
+                  console.log(' Login successful');
                   handleLoginSuccess(loginResult.user);
               } else {
                   showNotification(loginResult.message || 'Login failed. Please check your Xame-ID.');
               }
 } catch (err) {
-              console.error('❌ Login error:', err);
+              console.error(' Login error:', err);
               showNotification('A server or network error occurred. Please try again later.');
           }
       });
@@ -5359,7 +5359,7 @@ function setupEventListeners() {
       registerForm.addEventListener('submit', async (e) => {
           e.preventDefault();
           
-          console.log('📝 Registration form submitted');
+          console.log(' Registration form submitted');
           
           if (!firstNameInput || !lastNameInput || !dobHiddenDateInput) {
               console.error('Registration inputs not found');
@@ -5401,7 +5401,7 @@ function setupEventListeners() {
 
           try {
               e.submitter.disabled = true;
-              console.log('🔐 Attempting registration...');
+              console.log(' Attempting registration...');
 
               const response = await fetch(`${serverURL}/api/register`, {
                   method: 'POST',
@@ -5418,7 +5418,7 @@ function setupEventListeners() {
               if (data.success) {
                   const newUser = data.user || data;
                   
-                  console.log('✅ Registration successful:', newUser.xameId);
+                  console.log(' Registration successful:', newUser.xameId);
                   alert(`Registration successful! Your Xame-ID is: ${newUser.xameId}`);
                   
                   storage.set(KEYS.user, newUser); 
@@ -5428,7 +5428,7 @@ function setupEventListeners() {
                   showNotification(data.message || 'Registration failed. Please try again.');
               }
           } catch (err) {
-              console.error('❌ Registration error:', err);
+              console.error(' Registration error:', err);
               showNotification('A server or network error occurred. Please try again later.');
           } finally {
               e.submitter.disabled = false;
@@ -5440,7 +5440,7 @@ function setupEventListeners() {
       logoutBtn.addEventListener('click', () => {
           if (confirm('Are you sure you want to log out?')) {
               try {
-                  console.log('🚪 Logging out...');
+                  console.log(' Logging out...');
                   
                   // FIXED: Comprehensive cleanup
                   cleanupWaveSurfers();
@@ -5481,9 +5481,9 @@ function setupEventListeners() {
                   
                   show(elLanding);
                   showNotification('Logged out successfully');
-                  console.log('✅ Logout complete');
+                  console.log(' Logout complete');
               } catch (error) {
-                  console.error('❌ Logout error:', error);
+                  console.error(' Logout error:', error);
                   showNotification('Error during logout');
               }
           }
@@ -5501,12 +5501,12 @@ function setupEventListeners() {
       });
   }
   
-  console.log('✅ Event listeners setup complete');
+  console.log(' Event listeners setup complete');
 }
 
 // FIXED: Simplified boot function with better error handling
 (function boot() {
-  console.log('🚀 Starting boot sequence...');
+  console.log(' Starting boot sequence...');
   
   try {
     // Initialize dual storage system
@@ -5535,25 +5535,25 @@ function setupEventListeners() {
 
     ensurePlaceholderStyles();
     
-    console.log('🔍 Checking for existing user...');
+    console.log(' Checking for existing user...');
     const user = storage.get(KEYS.user);
     
     if (user && user.xameId) {
-      console.log('✅ Found existing user:', user.xameId);
+      console.log(' Found existing user:', user.xameId);
       handleLoginSuccess(user);
     } else {
-      console.log('ℹ️ No existing user found');
+      console.log(' No existing user found');
       show(elLanding);
     }
     
     setupEventListeners();
     
     // Log storage stats
-    console.log('📊 Storage stats:', storage.getStats());
+    console.log(' Storage stats:', storage.getStats());
     
-    console.log('✅ Boot sequence complete');
+    console.log(' Boot sequence complete');
   } catch (error) {
-    console.error('❌ Boot error:', error);
+    console.error(' Boot error:', error);
     show(elLanding);
   }
 })();
@@ -5566,7 +5566,7 @@ function setupEventListeners() {
 (function initKeyboardFix() {
   'use strict';
   
-  console.log('🔧 Initializing keyboard fix...');
+  console.log(' Initializing keyboard fix...');
   
   let initialHeight = window.innerHeight;
   
@@ -5638,8 +5638,8 @@ function setupEventListeners() {
     });
   }
   
-  console.log('✅ Keyboard fix initialized');
-})(); // ✅ THIS WAS MISSING - NOW FIXED
+  console.log(' Keyboard fix initialized');
+})(); //  THIS WAS MISSING - NOW FIXED
 
 /*
 // PART 19: Visibility Change Handler
@@ -5647,7 +5647,7 @@ function setupEventListeners() {
 
 document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
-        console.log('📴 Tab hidden');
+        console.log(' Tab hidden');
         
         if ('speechSynthesis' in window) {
             speechSynthesis.cancel();
@@ -5664,7 +5664,7 @@ document.addEventListener('visibilitychange', () => {
             }
         });
     } else {
-        console.log('📱 Tab visible');
+        console.log(' Tab visible');
         
         if (socket && socket.connected) {
             socket.emit('request_online_users');
@@ -5682,7 +5682,7 @@ document.addEventListener('visibilitychange', () => {
 */
 
 window.addEventListener('beforeunload', (e) => {
-    console.log('🔄 Page unloading...');
+    console.log(' Page unloading...');
     
     // FIXED: Comprehensive cleanup on page unload
     try {
@@ -5708,9 +5708,9 @@ window.addEventListener('beforeunload', (e) => {
         // Cancel any pending renders
         renderScheduled = false;
         
-        console.log('✅ Cleanup complete');
+        console.log(' Cleanup complete');
     } catch (error) {
-        console.error('❌ Cleanup error:', error);
+        console.error(' Cleanup error:', error);
     }
 });
 
@@ -5719,7 +5719,7 @@ window.addEventListener('beforeunload', (e) => {
 */
 
 window.addEventListener('online', () => {
-    console.log('🌐 Network connection restored');
+    console.log(' Network connection restored');
     showNotification('Connection restored');
     
     if (USER && (!socket || !socket.connected)) {
@@ -5732,7 +5732,7 @@ window.addEventListener('online', () => {
 });
 
 window.addEventListener('offline', () => {
-    console.log('📡 Network connection lost');
+    console.log(' Network connection lost');
     showNotification('Connection lost. You are offline.');
 });
 
@@ -5780,24 +5780,24 @@ window.__XAME_DEBUG__ = {
 };
 
 console.log(`
-╔════════════════════════════════════════╗
-║                                        ║
-║   XamePage v${APP_VERSION} - OPTIMIZED      ║
-║   Performance Fixes Applied ✅         ║
-║   - WaveSurfer cleanup fixed           ║
-║   - Render batching added              ║
-║   - Message pagination (100 msgs)      ║
-║   - Socket event cleanup               ║
-║   - In-memory storage (no localStorage)║
-║   - Async merge with chunking          ║
-║                                        ║
-╚════════════════════════════════════════╝
+
+                                        
+   XamePage v${APP_VERSION} - OPTIMIZED      
+   Performance Fixes Applied          
+   - WaveSurfer cleanup fixed           
+   - Render batching added              
+   - Message pagination (100 msgs)      
+   - Socket event cleanup               
+   - In-memory storage (no localStorage)
+   - Async merge with chunking          
+                                        
+
 `);
 
-console.log('✅ XamePage initialized successfully');
-console.log('🔍 Debug helpers available at window.__XAME_DEBUG__');
-console.log('📊 Memory usage:', window.__XAME_DEBUG__.getMemoryUsage());
-console.log('📦 Active resources:', window.__XAME_DEBUG__.getResourceCount());
+console.log(' XamePage initialized successfully');
+console.log(' Debug helpers available at window.__XAME_DEBUG__');
+console.log(' Memory usage:', window.__XAME_DEBUG__.getMemoryUsage());
+console.log(' Active resources:', window.__XAME_DEBUG__.getResourceCount());
 
 /*
 // END OF OPTIMIZED XAMEPAGE v2.1
