@@ -10,6 +10,7 @@
 // - WebRTC signaling for voice/video calls
 // - Privacy-filtered profile data
 // - Secure file uploads (profile pictures, attachments)
+// - Password authentication with bcrypt
 // - Comprehensive API endpoints
 //
 
@@ -24,6 +25,7 @@ const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
 const cors = require('cors');
 const { body, validationResult } = require('express-validator');
+const bcrypt = require('bcryptjs'); // ✅ ADDED
 require('dotenv').config();
 
 // ============================================================
@@ -78,12 +80,14 @@ const contactSchema = new mongoose.Schema({
     addedAt: { type: Date, default: Date.now }
 });
 
+// ✅ UPDATED: Added password field
 const userSchema = new mongoose.Schema({
     xameId: { type: String, required: true, unique: true },
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
     preferredName: { type: String, default: '' },
     dob: { type: String, required: true },
+    password: { type: String, required: true }, // ✅ ADDED
     profilePic: { type: String, default: '' },
     hidePreferredName: { type: Boolean, default: false },
     hideProfilePicture: { type: Boolean, default: false },
@@ -336,25 +340,41 @@ async function getFullContactData(userId) {
 // API ENDPOINTS
 // ============================================================
 
-// Registration
+// ✅ UPDATED: Registration with password hashing
 app.post('/api/register',
     body('firstName').trim().escape().notEmpty().withMessage('First name is required.'),
     body('lastName').trim().escape().notEmpty().withMessage('Last name is required.'),
     body('dob').isDate({ format: 'YYYY-MM-DD' }).withMessage('Date of birth must be YYYY-MM-DD.'),
+    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters.'), // ✅ ADDED
     async (req, res) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
             return res.status(400).json({ success: false, errors: errors.array() });
         }
 
-        const { firstName, lastName, dob } = req.body;
+        const { firstName, lastName, dob, password } = req.body; // ✅ ADDED password
 
         try {
+            // ✅ Hash the password
+            const hashedPassword = await bcrypt.hash(password, 10);
+            
             const xameId = await generateUniqueXameId();
-            const newUser = new User({ xameId, firstName, lastName, dob });
+            const newUser = new User({ 
+                xameId, 
+                firstName, 
+                lastName, 
+                dob,
+                password: hashedPassword // ✅ Save hashed password
+            });
             await newUser.save();
+            
             console.log(`✅ User registered: ${newUser.xameId}`);
-            res.json({ success: true, user: newUser });
+            
+            // ✅ Don't send password back to client
+            const userResponse = newUser.toObject();
+            delete userResponse.password;
+            
+            res.json({ success: true, user: userResponse });
         } catch (error) {
             console.error('Registration error:', error);
             res.status(500).json({ success: false, message: 'Server error during registration.' });
@@ -362,28 +382,69 @@ app.post('/api/register',
     }
 );
 
-// Login
+// ✅ UPDATED: Login with password verification
 app.post('/api/login', async (req, res) => {
-    const { xameId } = req.body;
+    const { xameId, password } = req.body; // ✅ ADDED password
+    
+    // ✅ Validate input
+    if (!xameId) {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Xame-ID is required.' 
+        });
+    }
+    
+    if (!password) {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Password is required.' 
+        });
+    }
     
     try {
         const user = await User.findOne({ xameId });
-        if (user) {
-            userToSocketMap.set(user.xameId, `placeholder_socket_${user.xameId}`);
-            console.log(`✅ User logged in: ${user.xameId}`);
-
-            const userWithPrivacy = {
-                ...user.toObject(),
-                privacySettings: {
-                    hidePreferredName: user.hidePreferredName,
-                    hideProfilePicture: user.hideProfilePicture
-                }
-            };
-
-            res.json({ success: true, user: userWithPrivacy });
-        } else {
-            res.status(404).json({ success: false, message: 'User not found.' });
+        
+        if (!user) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'User not found.' 
+            });
         }
+        
+        // ✅ Check if user has no password (legacy user - migration needed)
+        if (!user.password) {
+            return res.status(403).json({ 
+                success: false, 
+                message: 'Your account needs a password. Please contact support.',
+                requiresPasswordReset: true
+            });
+        }
+        
+        // ✅ Verify password
+        const passwordMatch = await bcrypt.compare(password, user.password);
+        
+        if (!passwordMatch) {
+            return res.status(401).json({ 
+                success: false, 
+                message: 'Invalid password.' 
+            });
+        }
+        
+        // ✅ Login successful
+        userToSocketMap.set(user.xameId, `placeholder_socket_${user.xameId}`);
+        console.log(`✅ User logged in: ${user.xameId}`);
+
+        // ✅ Don't send password to client
+        const userWithPrivacy = {
+            ...user.toObject(),
+            privacySettings: {
+                hidePreferredName: user.hidePreferredName,
+                hideProfilePicture: user.hideProfilePicture
+            }
+        };
+        delete userWithPrivacy.password; // ✅ Remove password from response
+
+        res.json({ success: true, user: userWithPrivacy });
     } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ success: false, message: 'Server error during login.' });
@@ -1051,5 +1112,6 @@ server.listen(PORT, () => {
     console.log(`🌐 Local access: http://localhost:${PORT}`);
     console.log(`📁 Serving files from: ${__dirname}`);
     console.log(`🗄️  MongoDB: ${MONGODB_URI ? 'Connected' : 'Not configured'}`);
+    console.log(`🔐 Password authentication: ENABLED`);
     console.log('='.repeat(60));
 });

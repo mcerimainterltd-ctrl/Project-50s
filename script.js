@@ -257,29 +257,45 @@ const KEYS = {
 const APP_VERSION = '2.1';
 
 // =====================
-// 🔊 APP SOUND SYSTEM (CORDOVA SAFE)  — PART 1
+// PART 1B --- 🔊 APP SOUND SYSTEM (FIXED - Uses HTML Audio Elements)
 // =====================
 
-const APP_SOUNDS = {
-  incomingCall: new Audio('xamepage_call.mp3'),
-  outgoingCall: new Audio('xamepage_outgoing.mp3'),
-  message: new Audio('xamepage_message.mp3')
-};
+// FIXED: Audio elements will be loaded from HTML, not constructed in JS
+let APP_SOUNDS = {};
 
-// Ensure sounds load properly in Cordova
-document.addEventListener('deviceready', () => {
-  console.log("Cordova ready — loading sounds");
-  Object.values(APP_SOUNDS).forEach(audio => {
-    audio.preload = "auto";
-    audio.load();
+// Initialize audio references after DOM is ready
+function initializeAudioElements() {
+  APP_SOUNDS = {
+    incomingCall: document.getElementById('incomingCallSound'),
+    outgoingCall: document.getElementById('outgoingCallSound'),
+    message: document.getElementById('messageSound')
+  };
+  
+  // Verify all audio elements loaded
+  const missingAudio = [];
+  Object.entries(APP_SOUNDS).forEach(([key, audio]) => {
+    if (!audio) {
+      missingAudio.push(key);
+      console.error(`❌ Missing audio element: ${key}`);
+    } else {
+      console.log(`✅ Audio element loaded: ${key}`);
+    }
   });
-});
+  
+  if (missingAudio.length > 0) {
+    console.error('⚠️ Missing audio elements:', missingAudio.join(', '));
+    console.error('Make sure your HTML includes all three audio elements!');
+  }
+}
 
 // Safe play helper (Android-friendly)
 function playSound(type, loop = false) {
   try {
     const audio = APP_SOUNDS[type];
-    if (!audio) return;
+    if (!audio) {
+      console.warn(`Audio element not found: ${type}`);
+      return;
+    }
 
     audio.currentTime = 0;
     audio.loop = loop;
@@ -287,7 +303,7 @@ function playSound(type, loop = false) {
     const playPromise = audio.play();
     if (playPromise !== undefined) {
       playPromise.catch(err => {
-        console.warn('Audio blocked on Android:', err);
+        console.warn('Audio blocked (user interaction required):', err);
       });
     }
   } catch (e) {
@@ -304,6 +320,7 @@ function stopSound(type) {
   audio.loop = false;
 }
 
+//Part 1C
 // ===== File Upload Configuration =====
 const FILE_CONFIG = {
   maxSize: 500 * 1024 * 1024, // 500MB
@@ -704,6 +721,259 @@ document.addEventListener('deviceready', () => {
   console.log('📱 Cordova device ready');
   bootstrapApp();
 });
+
+/*
+// PART 2C: Socket Connection Implementation (CRITICAL - WAS MISSING)
+*/
+
+function connectSocket() {
+    if (socket && socket.connected) {
+        console.log('✅ Socket already connected');
+        return;
+    }
+
+    if (!USER || !USER.xameId) {
+        console.warn('⚠️ Cannot connect socket without user');
+        return;
+    }
+
+    console.log('🔌 Connecting socket for user:', USER.xameId);
+
+    try {
+        socket = io(serverURL, {
+            query: { userId: USER.xameId },
+            transports: ['websocket', 'polling'],
+            path: '/socket.io/',
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            reconnectionAttempts: 10,
+            timeout: 20000
+        });
+
+        // Register all socket event handlers
+        registerSocketHandlers(socket);
+
+        // Additional socket lifecycle events
+        socket.on('typing', ({ senderId }) => {
+            if (ACTIVE_ID === senderId && typingEl) {
+                typingEl.textContent = 'typing...';
+                typingEl.classList.remove('hidden');
+            }
+        });
+
+        socket.on('stop-typing', ({ senderId }) => {
+            if (ACTIVE_ID === senderId && typingEl) {
+                typingEl.classList.add('hidden');
+            }
+        });
+
+        socket.on('message-status-update', ({ recipientId, messageId, status }) => {
+            const chat = getChat(recipientId);
+            const msg = chat.find(m => m.id === messageId);
+            if (msg) {
+                msg.status = status;
+                setChat(recipientId, chat);
+                if (ACTIVE_ID === recipientId) {
+                    scheduleRender(renderMessages, 'messages');
+                }
+            }
+        });
+
+        socket.on('message-seen-update', ({ recipientId, messageIds }) => {
+            const chat = getChat(recipientId);
+            let updated = false;
+            
+            messageIds.forEach(msgId => {
+                const msg = chat.find(m => m.id === msgId);
+                if (msg && msg.status !== 'seen') {
+                    msg.status = 'seen';
+                    updated = true;
+                }
+            });
+
+            if (updated) {
+                setChat(recipientId, chat);
+                if (ACTIVE_ID === recipientId) {
+                    scheduleRender(renderMessages, 'messages');
+                }
+            }
+        });
+
+        socket.on('new_message_count', ({ senderId }) => {
+            const contact = CONTACTS.find(c => c.id === senderId);
+            if (contact && ACTIVE_ID !== senderId) {
+                contact.unreadCount = (contact.unreadCount || 0) + 1;
+                storage.set(KEYS.contacts, CONTACTS);
+                scheduleRender(() => renderContacts(), 'contacts');
+            }
+        });
+
+        socket.on('new_missed_call_count', ({ senderId }) => {
+            const contact = CONTACTS.find(c => c.id === senderId);
+            if (contact) {
+                contact.missedCallsCount = (contact.missedCallsCount || 0) + 1;
+                storage.set(KEYS.contacts, CONTACTS);
+                scheduleRender(() => renderContacts(), 'contacts');
+            }
+        });
+
+        socket.on('messages-deleted', ({ deleterId, contactId, messageIds, permanently }) => {
+            console.log(`Messages deleted by ${deleterId}:`, messageIds);
+            
+            const chat = getChat(contactId);
+            const updatedChat = chat.filter(m => !messageIds.includes(m.id));
+            setChat(contactId, updatedChat);
+
+            if (ACTIVE_ID === contactId) {
+                scheduleRender(renderMessages, 'messages');
+            }
+
+            const notification = permanently 
+                ? `${messageIds.length} message(s) were deleted by sender`
+                : `${messageIds.length} message(s) deleted`;
+            
+            showNotification(notification);
+        });
+
+        // WebRTC signaling events
+        socket.on('call-user', async ({ offer, callerId, caller, callType, callId }) => {
+            console.log('📞 Incoming call from:', callerId, 'Type:', callType);
+            
+            try {
+                showIncomingCallNotification(caller, callType, offer);
+                
+                // Store call data for later acceptance
+                window.__pendingCall__ = {
+                    offer,
+                    callerId,
+                    caller,
+                    callType,
+                    callId
+                };
+            } catch (error) {
+                console.error('Error handling incoming call:', error);
+            }
+        });
+
+        socket.on('make-answer', async ({ answer, senderId }) => {
+            console.log('📞 Received answer from:', senderId);
+            await handleAnswer(answer);
+        });
+
+        socket.on('ice-candidate', ({ candidate, senderId }) => {
+            console.log('📞 Received ICE candidate from:', senderId);
+            handleNewIceCandidate(candidate);
+        });
+
+        socket.on('call-accepted', ({ recipientId }) => {
+            console.log('📞 Call accepted by:', recipientId);
+            stopOutgoingRing();
+        });
+
+        socket.on('call-rejected', ({ senderId, reason }) => {
+            console.log('📞 Call rejected by:', senderId, 'Reason:', reason);
+            stopOutgoingRing();
+            showNotification(reason === 'offline' ? 'User is offline' : 'Call declined');
+            exitVideoCall();
+        });
+
+        socket.on('call-acknowledged', ({ senderId, acknowledgedCallId }) => {
+            console.log('📞 Call acknowledged by:', senderId);
+        });
+
+        console.log('✅ Socket event handlers registered');
+
+    } catch (error) {
+        console.error('❌ Socket connection error:', error);
+        showNotification('Failed to connect to server');
+        scheduleReconnect();
+    }
+}
+
+// Helper function for incoming call handling
+async function handleIncomingCall(offer, callerId) {
+    try {
+        const hasVideo = window.__pendingCall__?.callType === 'video';
+        
+        localStream = await navigator.mediaDevices.getUserMedia({
+            video: hasVideo,
+            audio: true
+        });
+
+        RESOURCES.localStreams.push(localStream);
+
+        videoCallOverlay.classList.remove('hidden');
+        elChatHeader.classList.add('hidden');
+        composer.classList.add('hidden');
+
+        localVideo.srcObject = localStream;
+        localVideo.muted = true;
+
+        if (!hasVideo) {
+            localVideo.style.display = 'none';
+        } else {
+            localVideo.style.display = 'block';
+            makeDraggable(localVideo);
+        }
+
+        peerConnection = new RTCPeerConnection(rtcConfig);
+        RESOURCES.peerConnections.push(peerConnection);
+
+        peerConnection.ontrack = (event) => {
+            console.log('Received remote track');
+            remoteStream = event.streams[0];
+            
+            if (remoteStream && remoteStream.getTracks().length > 0) {
+                remoteVideo.srcObject = remoteStream;
+                remoteVideo.muted = false;
+                remoteVideo.play().catch(e => console.error("Error playing remote video:", e));
+            }
+        };
+
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate && socket) {
+                socket.emit('ice-candidate', {
+                    recipientId: callerId,
+                    candidate: event.candidate
+                });
+            }
+        };
+
+        localStream.getTracks().forEach(track => {
+            peerConnection.addTrack(track, localStream);
+        });
+
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+
+        if (socket) {
+            socket.emit('make-answer', {
+                recipientId: callerId,
+                answer: answer
+            });
+        }
+
+        // Process any pending ICE candidates
+        for (const candidate of pendingIceCandidates) {
+            try {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (error) {
+                console.error('Failed to add ICE candidate:', error);
+            }
+        }
+        pendingIceCandidates = [];
+
+        delete window.__pendingCall__;
+
+    } catch (error) {
+        console.error('Failed to handle incoming call:', error);
+        showNotification('Failed to answer call');
+        exitVideoCall();
+    }
+}
 
 /*
 // PART 3: Element References and Helper Functions (PATCHED — NULL-SAFE + CLEANED)
@@ -3830,6 +4100,31 @@ function forwardMessages(messageIds) {
   }
 }
 
+async function syncDeletionsWithServer(deletionData) {
+    if (!socket || !socket.connected) {
+        console.error('Cannot sync deletions: Socket not connected');
+        return false;
+    }
+
+    return new Promise((resolve) => {
+        socket.emit('sync-deletions', deletionData, (response) => {
+            if (response && response.success) {
+                console.log('✅ Deletions synced successfully');
+                resolve(true);
+            } else {
+                console.error('❌ Deletion sync failed:', response?.message);
+                resolve(false);
+            }
+        });
+
+        // Timeout after 5 seconds
+        setTimeout(() => {
+            console.error('⏱️ Deletion sync timeout');
+            resolve(false);
+        }, 5000);
+    });
+}
+
 /*
 // PART 9:
 // Dialogs, Menus, Profile Management & Core UI Listeners (Updated for composer menu fix)
@@ -5094,28 +5389,58 @@ function registerSocketHandlers(socket) {
     });
 
     socket.on('contacts_list', (serverContacts) => {
-        if (!Array.isArray(serverContacts)) return;
+        console.log('Received updated contacts list from server:', serverContacts);
+        
+        if (!Array.isArray(serverContacts)) {
+            console.error('Invalid contacts list received');
+            return;
+        }
+        
+        const updatedContacts = serverContacts.map(c => {
+            let profilePicUrl = c.profilePic;
+            if (profilePicUrl) {
+                profilePicUrl = addCacheBuster(profilePicUrl);
+            }
+                                    
+            return {
+                id: c.xameId,
+                name: c.name || c.xameId,
+                profilePic: profilePicUrl,
+                online: c.isOnline || false,
+                status: c.status || 'Message a friend',
+                lastInteractionTs: c.lastInteractionTs || now(), 
+                lastInteractionPreview: c.lastInteractionPreview || '', 
+                isProfilePicHidden: c.isProfilePicHidden || false, 
+                createdAt: now(),
+                lastAt: now(),
+                unreadCount: 0
+            };
+        });
 
-        const updatedContacts = serverContacts.map(c => ({
-            id: c.xameId,
-            name: c.name || c.xameId,
-            profilePic: c.profilePic ? addCacheBuster(c.profilePic) : null,
-            online: c.isOnline || false,
-            status: c.status || 'Message a friend',
-            lastInteractionTs: c.lastInteractionTs || now(),
-            lastInteractionPreview: c.lastInteractionPreview || '',
-            isProfilePicHidden: c.isProfilePicHidden || false,
-            createdAt: now(),
-            lastAt: now(),
-            unreadCount: 0
-        }));
-
-        const self = updatedContacts.find(c => c.id === USER?.xameId);
-        if (self) self.online = true;
+        const selfContactIndex = updatedContacts.findIndex(c => c.id === USER.xameId);
+        if (selfContactIndex !== -1) {
+            updatedContacts[selfContactIndex].online = true;
+            updatedContacts[selfContactIndex].profilePic = USER.profilePic;
+            updatedContacts[selfContactIndex].isProfilePicHidden = false;
+        } else {
+            updatedContacts.push({
+                id: USER.xameId,
+                name: `${USER.firstName} ${USER.lastName} (You)`,
+                profilePic: USER.profilePic,
+                online: true,
+                status: 'Message yourself',
+                createdAt: now(),
+                lastAt: now(),
+                lastInteractionTs: now(),
+                lastInteractionPreview: 'Message yourself',
+                isProfilePicHidden: false,
+                unreadCount: 0
+            });
+        }
 
         CONTACTS = updatedContacts;
         storage.set(KEYS.contacts, CONTACTS);
-        scheduleRender(() => renderContacts(), 'contacts');
+        scheduleRender(() => renderContacts(searchInput?.value), 'contacts');
     });
 
     socket.on('disconnect', () => {
@@ -5245,7 +5570,7 @@ const handleDateSegmentInput = (currentInput, maxLength, nextInput) => {
 };
 
 /*
-// PART 17: FIXED Boot & Event Listeners with Better Initialization
+// PART 17: FIXED Boot & Event Listeners with Password Authentication
 */
 
 // Global error handler
@@ -5258,7 +5583,37 @@ window.addEventListener('unhandledrejection', (event) => {
     event.preventDefault();
 });
 
-// FIXED: Separate event listener setup
+// ===== Password Validation Helper =====
+function validatePassword(password) {
+    const errors = [];
+    
+    if (password.length < 8) {
+        errors.push('Password must be at least 8 characters long');
+    }
+    
+    if (!/[A-Z]/.test(password)) {
+        errors.push('Password must contain at least one uppercase letter');
+    }
+    
+    if (!/[a-z]/.test(password)) {
+        errors.push('Password must contain at least one lowercase letter');
+    }
+    
+    if (!/[0-9]/.test(password)) {
+        errors.push('Password must contain at least one number');
+    }
+    
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+        errors.push('Password must contain at least one special character');
+    }
+    
+    return {
+        valid: errors.length === 0,
+        errors: errors
+    };
+}
+
+// FIXED: Separate event listener setup with password auth
 function setupEventListeners() {
   console.log('🔧 Setting up event listeners...');
   
@@ -5338,6 +5693,7 @@ function setupEventListeners() {
       });
   }
   
+  // ===== FIXED: LOGIN FORM WITH PASSWORD =====
   if (loginForm) {
       loginForm.addEventListener('submit', async (e) => {
           e.preventDefault();
@@ -5349,16 +5705,29 @@ function setupEventListeners() {
               return;
           }
           
+          const loginPasswordInput = document.getElementById('loginPasswordInput');
+          if (!loginPasswordInput) {
+              console.error('Password input not found');
+              return;
+          }
+          
           const xameId = loginXameIdInput.value.trim();
+          const password = loginPasswordInput.value;
           
           if (!xameId) {
               showNotification('Please enter your Xame-ID.');
               return;
           }
           
+          if (!password) {
+              showNotification('Please enter your password.');
+              return;
+          }
+          
           console.log('🔐 Attempting login for:', xameId);
           
           try {
+              // STEP 1: Check if user exists
               const checkResponse = await fetch(`${serverURL}/api/get-user-name`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -5383,6 +5752,7 @@ function setupEventListeners() {
                   return;
               }
               
+              // STEP 2: Check if switching users
               if (USER && USER.xameId !== xameId) {
                   const switchConfirmed = confirm('Logging in as a different user will sign you out. Do you want to continue?');
                   if (!switchConfirmed) {
@@ -5390,10 +5760,14 @@ function setupEventListeners() {
                   }
               }
 
+              // STEP 3: Attempt login with password
               const loginResponse = await fetch(`${serverURL}/api/login`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ xameId })
+                  body: JSON.stringify({ 
+                      xameId: xameId,
+                      password: password 
+                  })
               });
               
               if (!loginResponse.ok) {
@@ -5404,17 +5778,24 @@ function setupEventListeners() {
 
               if (loginResult.success) {
                   console.log('✅ Login successful');
+                  
+                  // Clear password field
+                  loginPasswordInput.value = '';
+                  
                   handleLoginSuccess(loginResult.user);
               } else {
-                  showNotification(loginResult.message || 'Login failed. Please check your Xame-ID.');
+                  showNotification(loginResult.message || 'Invalid password. Please try again.');
+                  loginPasswordInput.value = '';
+                  loginPasswordInput.focus();
               }
-} catch (err) {
+          } catch (err) {
               console.error('❌ Login error:', err);
               showNotification('A server or network error occurred. Please try again later.');
           }
       });
   }
 
+  // ===== FIXED: REGISTRATION FORM WITH PASSWORD =====
   if (registerForm) {
       registerForm.addEventListener('submit', async (e) => {
           e.preventDefault();
@@ -5426,15 +5807,27 @@ function setupEventListeners() {
               return;
           }
           
+          const passwordInput = document.getElementById('passwordInput');
+          const confirmPasswordInput = document.getElementById('confirmPasswordInput');
+          
+          if (!passwordInput || !confirmPasswordInput) {
+              console.error('Password inputs not found');
+              return;
+          }
+          
           const firstName = firstNameInput.value.trim();
           const lastName = lastNameInput.value.trim();
-          const dob = dobHiddenDateInput.value.trim(); 
+          const dob = dobHiddenDateInput.value.trim();
+          const password = passwordInput.value;
+          const confirmPassword = confirmPasswordInput.value;
           
+          // Validate names
           if (!firstName || !lastName) {
               showNotification("Please fill out both name fields.");
               return;
           }
 
+          // Validate DOB
           if (dobErrorElement) {
               dobErrorElement.style.display = 'none';
               dobErrorElement.textContent = '';
@@ -5459,6 +5852,23 @@ function setupEventListeners() {
               return;
           }
 
+          // Validate password match
+          if (password !== confirmPassword) {
+              showNotification('Passwords do not match. Please try again.');
+              passwordInput.value = '';
+              confirmPasswordInput.value = '';
+              passwordInput.focus();
+              return;
+          }
+
+          // Validate password strength
+          const passwordValidation = validatePassword(password);
+          if (!passwordValidation.valid) {
+              showNotification(passwordValidation.errors.join('\n'));
+              passwordInput.focus();
+              return;
+          }
+
           try {
               e.submitter.disabled = true;
               console.log('🔐 Attempting registration...');
@@ -5466,7 +5876,12 @@ function setupEventListeners() {
               const response = await fetch(`${serverURL}/api/register`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ firstName, lastName, dob })
+                  body: JSON.stringify({ 
+                      firstName: firstName,
+                      lastName: lastName, 
+                      dob: dob,
+                      password: password 
+                  })
               });
               
               if (!response.ok) {
@@ -5479,7 +5894,12 @@ function setupEventListeners() {
                   const newUser = data.user || data;
                   
                   console.log('✅ Registration successful:', newUser.xameId);
-                  alert(`Registration successful! Your Xame-ID is: ${newUser.xameId}`);
+                  
+                  // Clear password fields
+                  passwordInput.value = '';
+                  confirmPasswordInput.value = '';
+                  
+                  alert(`Registration successful! Your Xame-ID is: ${newUser.xameId}\n\nPlease save this ID, you'll need it to log in.`);
                   
                   storage.set(KEYS.user, newUser); 
                   handleLoginSuccess(newUser);
@@ -5496,6 +5916,52 @@ function setupEventListeners() {
       });
   }
 
+  // ===== CALL BUTTONS (Voice, Video, Clear Chat) =====
+  const voiceCallBtn = document.getElementById('voiceCallBtn');
+  const videoCallBtn = document.getElementById('videoCallBtn');
+  const clearChatBtn = document.getElementById('clearChatBtn');
+
+  if (voiceCallBtn) {
+      voiceCallBtn.addEventListener('click', () => {
+          if (!ACTIVE_ID) {
+              showNotification('No active contact selected.');
+              return;
+          }
+          startCall(ACTIVE_ID, 'voice');
+      });
+  }
+
+  if (videoCallBtn) {
+      videoCallBtn.addEventListener('click', () => {
+          if (!ACTIVE_ID) {
+              showNotification('No active contact selected.');
+              return;
+          }
+          startCall(ACTIVE_ID, 'video');
+      });
+  }
+
+  if (clearChatBtn) {
+      clearChatBtn.addEventListener('click', () => {
+          if (!ACTIVE_ID) return;
+          
+          if (confirm('Are you sure you want to clear all messages in this chat?')) {
+              setChat(ACTIVE_ID, []);
+              
+              const contact = CONTACTS.find(c => c.id === ACTIVE_ID);
+              if (contact) {
+                  contact.lastInteractionTs = now();
+                  contact.lastInteractionPreview = 'Chat cleared.';
+                  storage.set(KEYS.contacts, CONTACTS);
+              }
+              
+              renderMessages();
+              showNotification('Chat cleared successfully.');
+          }
+      });
+  }
+
+  // ===== LOGOUT =====
   if (logoutBtn) {
       logoutBtn.addEventListener('click', () => {
           if (confirm('Are you sure you want to log out?')) {
@@ -5550,6 +6016,7 @@ function setupEventListeners() {
       });
   }
   
+  // ===== SEARCH =====
   if (searchInput) {
       // FIXED: Use debounce with leading edge for immediate feedback
       const debouncedSearch = debounce((value) => {
@@ -5569,6 +6036,9 @@ function setupEventListeners() {
   console.log('🚀 Starting boot sequence...');
   
   try {
+    // Initialize audio elements FIRST
+    initializeAudioElements();
+    
     // Initialize dual storage system
     initializeMemoryFromPersistent();
     
@@ -5577,6 +6047,7 @@ function setupEventListeners() {
       storage.set(KEYS.version, APP_VERSION);
     }
 
+    // Setup DOB input handlers
     if (dobDayInput && dobMonthInput && dobYearInput && dobHiddenDateInput) {
         dobDayInput.addEventListener('input', () => {
             handleDateSegmentInput(dobDayInput, 2, dobMonthInput);
@@ -5617,7 +6088,6 @@ function setupEventListeners() {
     show(elLanding);
   }
 })();
-
 
 /*
 // PART 18: Mobile Keyboard Fix - Prevents Header/Composer Jumping

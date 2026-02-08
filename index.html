@@ -12,12 +12,12 @@
 <script src="https://unpkg.com/wavesurfer.js@7"></script>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#FFD700">
-
 </head>
 <body>
 
 <div id="app">
 
+    <!-- ========== LANDING PAGE ========== -->
     <div id="landing" class="screen auth-container">
         <h1 class="title">XamePage v2.1</h1>
         <p id="auth-subtitle" class="subtitle">Log in or create an account to continue.</p>
@@ -27,6 +27,7 @@
         </div>
     </div>
 
+    <!-- ========== REGISTRATION PAGE ========== -->
     <div id="register" class="screen hidden">
         <header class="auth-container-header">
             <button id="backToLandingBtn" class="icon-btn">←</button>
@@ -37,6 +38,7 @@
             <form id="registerForm" class="form-section">
                 <label class="sr-only" for="firstNameInput">First name</label>
                 <input id="firstNameInput" class="input" placeholder="First name" required maxlength="30" />
+                
                 <label class="sr-only" for="lastNameInput">Last name</label>
                 <input id="lastNameInput" class="input" placeholder="Last name" required maxlength="30" />
 
@@ -52,8 +54,11 @@
                     <div id="dobError" class="error-message" style="display: none;"></div>
                 </div>
                 <input id="dobHiddenDateInput" type="date" style="display: none;" />
+                
+                <!-- ✅ PASSWORD FIELDS -->
                 <label class="sr-only" for="passwordInput">Password</label>
-                <input id="passwordInput" class="input" type="password" placeholder="Password" required minlength="8" />
+                <input id="passwordInput" class="input" type="password" placeholder="Password (min 8 characters)" required minlength="8" />
+                
                 <label class="sr-only" for="confirmPasswordInput">Confirm Password</label>
                 <input id="confirmPasswordInput" class="input" type="password" placeholder="Confirm Password" required minlength="8" />
 
@@ -62,6 +67,7 @@
         </div>
     </div>
 
+    <!-- ========== LOGIN PAGE ========== -->
     <div id="login" class="screen hidden">
         <header class="auth-container-header">
             <button id="backToLandingBtn2" class="icon-btn">←</button>
@@ -72,6 +78,8 @@
             <form id="loginForm" class="form-section">
                 <label class="sr-only" for="loginXameIdInput">Xame-ID</label>
                 <input id="loginXameIdInput" class="input" placeholder="Enter your Xame-ID" required maxlength="15" />
+                
+                <!-- ✅ PASSWORD FIELD -->
                 <label class="sr-only" for="loginPasswordInput">Password</label>
                 <input id="loginPasswordInput" class="input" type="password" placeholder="Enter your password" required />
 
@@ -80,6 +88,7 @@
         </div>
     </div>
 
+    <!-- ========== CONTACTS PAGE ========== -->
     <div id="contacts" class="screen hidden">
         <header class="header">
             <div class="left">
@@ -104,10 +113,10 @@
         <div class="search-bar">
             <input id="searchInput" class="search-input" placeholder="Search contacts" />
         </div>
-        <main id="contactList" class="list">
-            </main>
+        <main id="contactList" class="list"></main>
     </div>
 
+    <!-- ========== PROFILE PAGE ========== -->
     <div id="profileSection" class="screen hidden">
         <header class="header">
             <button id="profileBackBtn" class="icon-btn">←</button>
@@ -116,14 +125,13 @@
         <main class="content">
             <div class="profile-container">
                 <div class="profile-pic-uploader">
-
-             <img 
-  id="profilePicPreview"
-  src="/uploads/profile_pics/default.png"
-  alt="Profile Picture"
-  class="profile-pic"
-  onerror="this.onerror=null; this.src='/media/profile_pics/default.png';">
-
+                    <!-- ✅ FIXED: Profile picture path -->
+                    <img 
+                        id="profilePicPreview"
+                        src="/media/profile_pics/default.png"
+                        alt="Profile Picture"
+                        class="profile-pic"
+                        onerror="this.onerror=null; this.src='/media/profile_pics/default.png';">
                     <label for="profilePic" class="upload-overlay">
                         <span class="upload-icon">📷</span>
                     </label>
@@ -153,6 +161,7 @@
         </main>
     </div>
 
+    <!-- ========== STATUS PAGE ========== -->
     <div id="statusSection" class="status-section hidden">
         <header class="header">
             <button id="statusBackBtn" class="icon-btn">←</button>
@@ -172,6 +181,7 @@
         <button id="addStatusBtn" class="fab">+</button>
     </div>
 
+    <!-- ========== CHAT PAGE ========== -->
     <div id="chat" class="chat hidden">
         <header class="header">
             <div class="header-details">
@@ -190,6 +200,7 @@
                 </div>
             </div>
             <div class="toolbar">
+                <!-- ✅ CALL BUTTONS (now functional) -->
                 <button id="voiceCallBtn" class="icon-btn" title="Voice Call">📞</button>
                 <button id="videoCallBtn" class="icon-btn" title="Video Call">📹</button>
                 <button id="clearChatBtn" class="icon-btn" title="Clear All Chat Messages">🗑</button> 
@@ -217,7 +228,6 @@
                     <button id="attachBtn" class="dropdown-item">📎 Attachment</button>
                     <button id="menu-voice-note-btn" class="dropdown-item">🎙️ Voice Note</button>
                     <button id="menu-voice-to-text-btn" class="dropdown-item">🗣️ Voice-to-Text</button>
-             
                 </div>
             </div>
             <input type="file" id="fileInput" class="hidden" />
@@ -248,6 +258,7 @@
             🗑️ Delete (0)
         </button>
 
+        <!-- ========== VIDEO CALL OVERLAY ========== -->
         <div id="videoCallOverlay" class="hidden">
             <video id="remoteVideo" autoplay playsinline></video>
             <video id="localVideo" muted autoplay playsinline></video>
@@ -263,6 +274,7 @@
         </div>
     </div>
 
+    <!-- ========== CROP MODAL ========== -->
     <div id="cropModal" class="dialog-backdrop hidden">
         <div class="dialog modal-content">
             <div class="modal-buttons">
@@ -273,6 +285,7 @@
         </div>
     </div>
 
+    <!-- ========== SEARCH DIALOG ========== -->
     <div id="searchDialog" class="dialog-backdrop hidden">
         <div class="dialog">
             <div class="auth-content">
@@ -287,9 +300,12 @@
             </div>
         </div>
     </div>
+    
+    <!-- ========== LAYER (for dialogs/menus) ========== -->
     <div id="layer"></div>
 </div>
 
+<!-- ========== INCOMING CALL OVERLAY ========== -->
 <div id="incomingCallOverlay" class="call-overlay hidden">
     <div class="call-notification-card">
         <div class="call-avatar-container">
@@ -312,10 +328,27 @@
     </div>
 </div>
 
-<script src="/socket.io/socket.io.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
+<!-- ✅ CRITICAL FIX: Audio Elements for App Sounds -->
+<audio id="incomingCallSound" preload="auto">
+    <source src="/xamepage_call.mp3" type="audio/mpeg">
+    Your browser does not support the audio element.
+</audio>
+<audio id="outgoingCallSound" preload="auto">
+    <source src="/xamepage_outgoing.mp3" type="audio/mpeg">
+    Your browser does not support the audio element.
+</audio>
+<audio id="messageSound" preload="auto">
+    <source src="/xamepage_message.mp3" type="audio/mpeg">
+    Your browser does not support the audio element.
+</audio>
+
+<!-- ========== SCRIPTS ========== -->
+<script src="/socket.io/socket.io.js" onerror="console.error('Failed to load Socket.IO')"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js" 
+        onerror="console.error('Failed to load Cropper.js')"></script>
 <script src="script.js"></script> 
 
+<!-- ========== SERVICE WORKER (PWA) ========== -->
 <script>
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("/service-worker.js")
