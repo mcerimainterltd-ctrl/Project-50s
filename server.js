@@ -1,4 +1,4 @@
-
+//
 // XamePage v2.1 Server File
 //
 // Production-grade server with full MongoDB persistence and WebRTC support.
@@ -339,13 +339,14 @@ async function getFullContactData(userId) {
 
 // Registration with password hashing
 app.post('/api/register',
-    body('firstName').trim().escape().notEmpty().withMessage('First name is required.'),
-    body('lastName').trim().escape().notEmpty().withMessage('Last name is required.'),
-    body('dob').isDate({ format: 'YYYY-MM-DD' }).withMessage('Date of birth must be YYYY-MM-DD.'),
+    body('firstName').trim().notEmpty().withMessage('First name is required.'),
+    body('lastName').trim().notEmpty().withMessage('Last name is required.'),
+    body('dob').matches(/^\d{4}-\d{2}-\d{2}$/).withMessage('Date of birth must be YYYY-MM-DD.'),
     body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters.'),
     async (req, res) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
+            console.log('REGISTER VALIDATION ERROR:', errors.array());
             return res.status(400).json({ success: false, errors: errors.array() });
         }
 
@@ -360,8 +361,14 @@ app.post('/api/register',
                 firstName, 
                 lastName, 
                 dob,
-                password: hashedPassword
+                password: hashedPassword,
+                contacts: [],
+                profilePic: '',
+                preferredName: '',
+                hidePreferredName: false,
+                hideProfilePicture: false
             });
+
             await newUser.save();
             
             console.log(`✅ User registered: ${newUser.xameId}`);
@@ -370,6 +377,7 @@ app.post('/api/register',
             delete userResponse.password;
             
             res.json({ success: true, user: userResponse });
+
         } catch (error) {
             console.error('Registration error:', error);
             res.status(500).json({ success: false, message: 'Server error during registration.' });
@@ -423,6 +431,8 @@ app.post('/api/login', async (req, res) => {
         }
         
         userToSocketMap.set(user.xameId, `placeholder_socket_${user.xameId}`);
+        onlineUsers.add(user.xameId);
+
         console.log(`✅ User logged in: ${user.xameId}`);
 
         const userWithPrivacy = {
@@ -435,6 +445,7 @@ app.post('/api/login', async (req, res) => {
         delete userWithPrivacy.password;
 
         res.json({ success: true, user: userWithPrivacy });
+
     } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ success: false, message: 'Server error during login.' });
@@ -505,37 +516,21 @@ app.post('/api/update-profile', upload.single('profilePic'), async (req, res) =>
         const user = await User.findOne({ xameId: userId });
         if (!user) {
             if (req.file) {
-                await fsPromises.unlink(req.file.path).catch(err => console.error('Failed to clean up file:', err));
+                await fsPromises.unlink(req.file.path).catch(() => {});
             }
             return res.status(404).json({ success: false, message: 'User not found.' });
         }
 
-        if (preferredName !== undefined) {
-            user.preferredName = preferredName;
-        }
-
-        if (hidePreferredName !== undefined) {
-            user.hidePreferredName = hidePreferredName === 'true';
-        }
-        if (hideProfilePicture !== undefined) {
-            user.hideProfilePicture = hideProfilePicture === 'true';
-        }
+        if (preferredName !== undefined) user.preferredName = preferredName;
+        if (hidePreferredName !== undefined) user.hidePreferredName = hidePreferredName === 'true';
+        if (hideProfilePicture !== undefined) user.hideProfilePicture = hideProfilePicture === 'true';
 
         if (removeProfilePic === 'true') {
             user.profilePic = '';
-            console.log(`✅ Profile picture removed for user: ${userId}`);
         } else if (req.file) {
-            // ✅ Profile pictures stored as base64 in MongoDB
             const imageBuffer = await fsPromises.readFile(req.file.path);
-            const base64Image = `data:${req.file.mimetype};base64,${imageBuffer.toString('base64')}`;
-            
-            user.profilePic = base64Image;
-            console.log(`✅ Profile picture updated for user: ${userId} (stored as base64 in MongoDB)`);
-
-            // Clean up temporary file
-            await fsPromises.unlink(req.file.path).catch(err => 
-                console.error('Failed to delete temp file:', err)
-            );
+            user.profilePic = `data:${req.file.mimetype};base64,${imageBuffer.toString('base64')}`;
+            await fsPromises.unlink(req.file.path).catch(() => {});
         }
 
         await user.save();
@@ -547,6 +542,7 @@ app.post('/api/update-profile', upload.single('profilePic'), async (req, res) =>
             hidePreferredName: user.hidePreferredName,
             hideProfilePicture: user.hideProfilePicture
         });
+
     } catch (error) {
         console.error('Profile update error:', error);
         res.status(500).json({ success: false, message: 'Server error during profile update.' });
@@ -565,31 +561,28 @@ app.post('/api/add-contact', async (req, res) => {
             return res.status(404).json({ success: false, message: 'User or contact not found.' });
         }
 
-        const contactExists = user.contacts.some(c => c.contactId && c.contactId.toString() === contact._id.toString());
+        const contactExists = user.contacts.some(
+            c => c.contactId && c.contactId.toString() === contact._id.toString()
+        );
+
         if (contactExists) {
             return res.status(409).json({ success: false, message: 'Contact already exists.' });
         }
 
-        user.contacts.push({
-            contactId: contact._id,
-            customName: customName
-        });
-
+        user.contacts.push({ contactId: contact._id, customName });
         await user.save();
-
-        const filteredContact = getPrivacyFilteredContactData(contact);
-        const displayName = getContactDisplayName(contact.xameId, filteredContact, { customName });
 
         res.json({
             success: true,
             message: 'Contact added successfully.',
             contact: {
                 xameId: contact.xameId,
-                name: displayName,
-                profilePic: filteredContact.profilePic,
+                name: customName || `${contact.firstName} ${contact.lastName}`,
+                profilePic: contact.profilePic,
                 isOnline: onlineUsers.has(contact.xameId)
             }
         });
+
     } catch (error) {
         console.error('Add contact error:', error);
         res.status(500).json({ success: false, message: 'Server error adding contact.' });
@@ -598,13 +591,13 @@ app.post('/api/add-contact', async (req, res) => {
 
 // Update contact
 app.post('/api/update-contact',
-    body('userId').trim().escape().notEmpty().withMessage('User ID is required.'),
-    body('contactId').trim().escape().notEmpty().withMessage('Contact ID is required.'),
-    body('newName').trim().escape().notEmpty().withMessage('New name is required.'),
+    body('userId').notEmpty().withMessage('User ID is required.'),
+    body('contactId').notEmpty().withMessage('Contact ID is required.'),
+    body('newName').notEmpty().withMessage('New name is required.'),
     async (req, res) => {
         const validationErrors = validationResult(req);
         if (!validationErrors.isEmpty()) {
-            return res.status(400).json({ success: false, message: 'Input validation failed.', errors: validationErrors.array() });
+            return res.status(400).json({ success: false, errors: validationErrors.array() });
         }
 
         const { userId, contactId, newName } = req.body;
@@ -612,70 +605,38 @@ app.post('/api/update-contact',
         try {
             const contactUser = await User.findOne({ xameId: contactId }).select('_id');
             if (!contactUser) {
-                return res.status(404).json({ success: false, message: 'The user you are trying to contact was not found.' });
+                return res.status(404).json({ success: false, message: 'Contact not found.' });
             }
 
-            let result = await User.updateOne(
-                {
-                    xameId: userId,
-                    'contacts.contactId': contactUser._id
-                },
-                {
-                    $set: { 'contacts.$.customName': newName }
-                }
+            const result = await User.updateOne(
+                { xameId: userId, 'contacts.contactId': contactUser._id },
+                { $set: { 'contacts.$.customName': newName } }
             );
 
             if (result.matchedCount === 0) {
                 const user = await User.findOne({ xameId: userId });
-                if (!user) {
-                    return res.status(404).json({ success: false, message: 'Your user profile was not found.' });
-                }
-
-                const contactExists = user.contacts.some(c => c.contactId && c.contactId.toString() === contactUser._id.toString());
-
-                if (!contactExists) {
-                    user.contacts.push({
-                        contactId: contactUser._id,
-                        customName: newName
-                    });
-                    await user.save();
-                    console.log(`✅ Contact ${contactId} ADDED with custom name ${newName} for user ${userId}.`);
-                } else {
-                    await user.save();
-                    console.log(`✅ Contact ${contactId} already exists but failed atomic update. Re-saving user document.`);
-                }
-
-                result = { modifiedCount: 1 };
+                user.contacts.push({ contactId: contactUser._id, customName: newName });
+                await user.save();
             }
 
-            console.log(`✅ Contact name for ${contactId} updated to ${newName} for user ${userId}.`);
+            res.json({ success: true, message: 'Contact updated.' });
 
-            res.json({
-                success: true,
-                message: 'Contact name updated successfully.',
-                updatedName: newName
-            });
         } catch (error) {
-            console.error(`🔴 MongoDB Update/Add Error for user ${userId} and contact ${contactId}:`, error);
-            res.status(500).json({ success: false, message: 'A critical server error occurred during the save operation. Please try again.' });
+            console.error('Update contact error:', error);
+            res.status(500).json({ success: false, message: 'Server error.' });
         }
     }
 );
 
 // Delete chat and contact
 app.post('/api/delete-chat-and-contact',
-    body('userId').trim().escape().notEmpty().withMessage('User ID is required.'),
-    body('contactId').trim().escape().notEmpty().withMessage('Contact ID is required.'),
+    body('userId').notEmpty(),
+    body('contactId').notEmpty(),
     async (req, res) => {
-        const validationErrors = validationResult(req);
-        if (!validationErrors.isEmpty()) {
-            return res.status(400).json({ success: false, message: 'Input validation failed.', errors: validationErrors.array() });
-        }
-
         const { userId, contactId } = req.body;
 
         if (userId === contactId) {
-            return res.status(403).json({ success: false, message: 'Cannot delete the self chat.' });
+            return res.status(403).json({ success: false, message: 'Cannot delete self.' });
         }
 
         try {
@@ -695,26 +656,18 @@ app.post('/api/delete-chat-and-contact',
                 ]
             });
 
-            let contactDeleted = false;
             if (contactToDelete) {
-                const contactResult = await User.updateOne(
+                await User.updateOne(
                     { xameId: userId },
                     { $pull: { contacts: { contactId: contactToDelete._id } } }
                 );
-                if (contactResult.modifiedCount > 0) {
-                    contactDeleted = true;
-                }
             }
 
-            console.log(`✅ Permanent chat/contact deletion complete for user ${userId} and contact ${contactId}.`);
+            res.json({ success: true, message: 'Contact and history deleted.' });
 
-            res.json({
-                success: true,
-                message: `Contact and all chat history permanently deleted. (Contact list entry removed: ${contactDeleted})`
-            });
         } catch (error) {
-            console.error(`🔴 Critical Error during permanent chat/contact deletion for user ${userId} and contact ${contactId}:`, error);
-            res.status(500).json({ success: false, message: 'A critical server error occurred during the permanent deletion operation.' });
+            console.error('Delete error:', error);
+            res.status(500).json({ success: false, message: 'Server error.' });
         }
     }
 );
@@ -1088,12 +1041,12 @@ app.get('/', (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 
-server.listen(PORT, () => {
+server.listen(PORT, "0.0.0.0", () => {
     console.log('='.repeat(60));
     console.log('✅ XamePage Server v2.1 Started Successfully');
     console.log('='.repeat(60));
     console.log(`📡 Server running on port: ${PORT}`);
-    console.log(`🌐 Local access: http://localhost:${PORT}`);
+    console.log(`🌐 Public access: http://0.0.0.0:${PORT}`);
     console.log(`📁 Serving files from: ${__dirname}`);
     console.log(`📂 Uploads directory: ${uploadDir}`);
     console.log(`🗄️  MongoDB: ${MONGODB_URI ? 'Connected' : 'Not configured'}`);
