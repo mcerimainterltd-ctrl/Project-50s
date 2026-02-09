@@ -1,4 +1,4 @@
-//
+
 // XamePage v2.1 Server File
 //
 // Production-grade server with full MongoDB persistence and WebRTC support.
