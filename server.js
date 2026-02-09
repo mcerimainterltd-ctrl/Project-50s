@@ -918,23 +918,6 @@ app.post('/api/migrate-all', async (req, res) => {
     }
 });
 
-
-app.get('/check-db', async (req, res) => {
-    try {
-        const totalUsers = await User.countDocuments();
-        const totalMessages = await Message.countDocuments();
-        
-        res.send(`
-            <h2>Database Connection Status</h2>
-            Total Users: ${totalUsers}<br>
-            Total Messages: ${totalMessages}<br>
-            MongoDB Connected: ${mongoose.connection.readyState === 1 ? '✅ YES' : '❌ NO'}
-        `);
-    } catch (error) {
-        res.send(`Error: ${error.message}`);
-    }
-});
-
 // ============================================================
 // SOCKET.IO HANDLERS
 // ============================================================
@@ -1305,6 +1288,26 @@ io.on('connection', (socket) => {
 // ============================================================
 // CATCH-ALL ROUTE FOR SPA
 // ============================================================
+
+app.get('/check-db', async (req, res) => {
+    try {
+        const totalUsers = await User.countDocuments();
+        const totalMessages = await Message.countDocuments();
+        
+        res.send(`
+            <h2>Database Connection Status</h2>
+            Total Users: ${totalUsers}<br>
+            Total Messages: ${totalMessages}<br>
+            MongoDB Connected: ${mongoose.connection.readyState === 1 ? '✅ YES' : '❌ NO'}
+        `);
+    } catch (error) {
+        res.send(`Error: ${error.message}`);
+    }
+});
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
