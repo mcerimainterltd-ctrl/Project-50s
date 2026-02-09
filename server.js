@@ -1316,7 +1316,7 @@ server.listen(PORT, "0.0.0.0", () => {
     console.log('   POST /api/migrate-message-attachments');
     console.log('   POST /api/migrate-all (runs both migrations)');
     console.log('='.repeat(60));
-});
+    
     console.log(`🔐 Password authentication: ENABLED`);
     console.log(`🖼️  Profile pictures: Stored as base64 in MongoDB`);
     console.log(`📎 Message attachments: Stored as base64 in MongoDB`);
