@@ -5,12 +5,11 @@
 // Compatible with both cloud deployment (Render) and local development (Termux).
 //
 // Features:
-// - MongoDB Atlas for persistent data storage
-// - Profile pictures stored as base64 in MongoDB (cross-platform)
-// - Voice notes & large files stored on Render's persistent disk
+// - MongoDB Atlas for persistent data storage (including ALL files as base64)
 // - Socket.IO for real-time messaging and presence
 // - WebRTC signaling for voice/video calls
 // - Privacy-filtered profile data
+// - Secure file uploads (ALL files stored in MongoDB as base64)
 // - Password authentication with bcrypt
 // - Comprehensive API endpoints
 //
@@ -46,9 +45,9 @@ const io = new Server(server, {
     path: '/socket.io/'
 });
 
-// Middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+// Middleware - Increased limits for base64 files
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cors());
 
 // ============================================================
@@ -82,6 +81,7 @@ const contactSchema = new mongoose.Schema({
     addedAt: { type: Date, default: Date.now }
 });
 
+// Profile pictures stored as base64 data URI
 const userSchema = new mongoose.Schema({
     xameId: { type: String, required: true, unique: true },
     firstName: { type: String, required: true },
@@ -96,6 +96,7 @@ const userSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 });
 
+// ✅ UPDATED: File attachments now stored as base64 data URI
 const messageSchema = new mongoose.Schema({
     messageId: { type: String, required: true, unique: true },
     senderId: { type: String, required: true, index: true },
@@ -103,7 +104,7 @@ const messageSchema = new mongoose.Schema({
     ts: { type: Number, required: true },
     text: { type: String },
     file: {
-        url: { type: String },
+        data: { type: String }, // Base64 data URI (e.g., "data:image/jpeg;base64,...")
         name: { type: String },
         type: { type: String }
     },
@@ -133,22 +134,21 @@ const CallHistory = mongoose.model('CallHistory', callHistorySchema);
 // FILE UPLOAD CONFIGURATION
 // ============================================================
 
-// ✅ UPDATED: Use Render persistent disk for production, local dir for development
-const uploadDir = process.env.RENDER 
-    ? '/opt/render/project/src/uploads' 
-    : path.join(__dirname, 'uploads');
+const upload = multer({ 
+    dest: 'uploads/',
+    limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+});
 
-const upload = multer({ dest: uploadDir });
+// Create uploads directory (for temporary storage only)
+const uploadDir = path.join(__dirname, 'uploads');
 
-// Create uploads directory
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
-    console.log('✅ Created uploads directory:', uploadDir);
+    console.log('✅ Created temporary uploads directory');
 }
 
 // Serve static files
 app.use(express.static(__dirname));
-app.use('/uploads', express.static(uploadDir));
 
 // ============================================================
 // ONLINE USER STATE MANAGEMENT
@@ -339,14 +339,13 @@ async function getFullContactData(userId) {
 
 // Registration with password hashing
 app.post('/api/register',
-    body('firstName').trim().notEmpty().withMessage('First name is required.'),
-    body('lastName').trim().notEmpty().withMessage('Last name is required.'),
-    body('dob').matches(/^\d{4}-\d{2}-\d{2}$/).withMessage('Date of birth must be YYYY-MM-DD.'),
+    body('firstName').trim().escape().notEmpty().withMessage('First name is required.'),
+    body('lastName').trim().escape().notEmpty().withMessage('Last name is required.'),
+    body('dob').isDate({ format: 'YYYY-MM-DD' }).withMessage('Date of birth must be YYYY-MM-DD.'),
     body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters.'),
     async (req, res) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
-            console.log('REGISTER VALIDATION ERROR:', errors.array());
             return res.status(400).json({ success: false, errors: errors.array() });
         }
 
@@ -361,14 +360,8 @@ app.post('/api/register',
                 firstName, 
                 lastName, 
                 dob,
-                password: hashedPassword,
-                contacts: [],
-                profilePic: '',
-                preferredName: '',
-                hidePreferredName: false,
-                hideProfilePicture: false
+                password: hashedPassword
             });
-
             await newUser.save();
             
             console.log(`✅ User registered: ${newUser.xameId}`);
@@ -377,7 +370,6 @@ app.post('/api/register',
             delete userResponse.password;
             
             res.json({ success: true, user: userResponse });
-
         } catch (error) {
             console.error('Registration error:', error);
             res.status(500).json({ success: false, message: 'Server error during registration.' });
@@ -431,8 +423,6 @@ app.post('/api/login', async (req, res) => {
         }
         
         userToSocketMap.set(user.xameId, `placeholder_socket_${user.xameId}`);
-        onlineUsers.add(user.xameId);
-
         console.log(`✅ User logged in: ${user.xameId}`);
 
         const userWithPrivacy = {
@@ -445,7 +435,6 @@ app.post('/api/login', async (req, res) => {
         delete userWithPrivacy.password;
 
         res.json({ success: true, user: userWithPrivacy });
-
     } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ success: false, message: 'Server error during login.' });
@@ -487,28 +476,36 @@ app.post('/api/get-user-name', async (req, res) => {
     }
 });
 
-// File upload - stores on Render's persistent disk
+// ✅ UPDATED: File upload now returns base64 data URI
 app.post('/api/upload-file', upload.single('file'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ success: false, message: 'No file uploaded.' });
     }
 
     try {
-        const fileExt = path.extname(req.file.originalname);
-        const newFilename = `${uuidv4()}${fileExt}`;
-        const newPath = path.join(uploadDir, newFilename);
+        // Read file and convert to base64
+        const fileBuffer = await fsPromises.readFile(req.file.path);
+        const base64Data = `data:${req.file.mimetype};base64,${fileBuffer.toString('base64')}`;
 
-        await fsPromises.rename(req.file.path, newPath);
+        // Clean up temporary file
+        await fsPromises.unlink(req.file.path).catch(err => 
+            console.error('Failed to delete temp file:', err)
+        );
 
-        const fileUrl = `/uploads/${newFilename}`;
-        res.json({ success: true, url: fileUrl });
+        // Return base64 data URI instead of file path
+        res.json({ 
+            success: true, 
+            url: base64Data,
+            name: req.file.originalname,
+            type: req.file.mimetype
+        });
     } catch (error) {
         console.error('File processing failed:', error);
         res.status(500).json({ success: false, message: 'File processing failed.' });
     }
 });
 
-// Update profile - stores profile pictures as base64 in MongoDB
+// Update profile - stores images as base64 in MongoDB
 app.post('/api/update-profile', upload.single('profilePic'), async (req, res) => {
     const { userId, preferredName, removeProfilePic, hidePreferredName, hideProfilePicture } = req.body;
 
@@ -516,21 +513,37 @@ app.post('/api/update-profile', upload.single('profilePic'), async (req, res) =>
         const user = await User.findOne({ xameId: userId });
         if (!user) {
             if (req.file) {
-                await fsPromises.unlink(req.file.path).catch(() => {});
+                await fsPromises.unlink(req.file.path).catch(err => console.error('Failed to clean up file:', err));
             }
             return res.status(404).json({ success: false, message: 'User not found.' });
         }
 
-        if (preferredName !== undefined) user.preferredName = preferredName;
-        if (hidePreferredName !== undefined) user.hidePreferredName = hidePreferredName === 'true';
-        if (hideProfilePicture !== undefined) user.hideProfilePicture = hideProfilePicture === 'true';
+        if (preferredName !== undefined) {
+            user.preferredName = preferredName;
+        }
+
+        if (hidePreferredName !== undefined) {
+            user.hidePreferredName = hidePreferredName === 'true';
+        }
+        if (hideProfilePicture !== undefined) {
+            user.hideProfilePicture = hideProfilePicture === 'true';
+        }
 
         if (removeProfilePic === 'true') {
             user.profilePic = '';
+            console.log(`✅ Profile picture removed for user: ${userId}`);
         } else if (req.file) {
+            // Read file and convert to base64
             const imageBuffer = await fsPromises.readFile(req.file.path);
-            user.profilePic = `data:${req.file.mimetype};base64,${imageBuffer.toString('base64')}`;
-            await fsPromises.unlink(req.file.path).catch(() => {});
+            const base64Image = `data:${req.file.mimetype};base64,${imageBuffer.toString('base64')}`;
+            
+            user.profilePic = base64Image;
+            console.log(`✅ Profile picture updated for user: ${userId} (stored as base64 in MongoDB)`);
+
+            // Clean up temporary file
+            await fsPromises.unlink(req.file.path).catch(err => 
+                console.error('Failed to delete temp file:', err)
+            );
         }
 
         await user.save();
@@ -542,7 +555,6 @@ app.post('/api/update-profile', upload.single('profilePic'), async (req, res) =>
             hidePreferredName: user.hidePreferredName,
             hideProfilePicture: user.hideProfilePicture
         });
-
     } catch (error) {
         console.error('Profile update error:', error);
         res.status(500).json({ success: false, message: 'Server error during profile update.' });
@@ -561,28 +573,31 @@ app.post('/api/add-contact', async (req, res) => {
             return res.status(404).json({ success: false, message: 'User or contact not found.' });
         }
 
-        const contactExists = user.contacts.some(
-            c => c.contactId && c.contactId.toString() === contact._id.toString()
-        );
-
+        const contactExists = user.contacts.some(c => c.contactId && c.contactId.toString() === contact._id.toString());
         if (contactExists) {
             return res.status(409).json({ success: false, message: 'Contact already exists.' });
         }
 
-        user.contacts.push({ contactId: contact._id, customName });
+        user.contacts.push({
+            contactId: contact._id,
+            customName: customName
+        });
+
         await user.save();
+
+        const filteredContact = getPrivacyFilteredContactData(contact);
+        const displayName = getContactDisplayName(contact.xameId, filteredContact, { customName });
 
         res.json({
             success: true,
             message: 'Contact added successfully.',
             contact: {
                 xameId: contact.xameId,
-                name: customName || `${contact.firstName} ${contact.lastName}`,
-                profilePic: contact.profilePic,
+                name: displayName,
+                profilePic: filteredContact.profilePic,
                 isOnline: onlineUsers.has(contact.xameId)
             }
         });
-
     } catch (error) {
         console.error('Add contact error:', error);
         res.status(500).json({ success: false, message: 'Server error adding contact.' });
@@ -591,13 +606,13 @@ app.post('/api/add-contact', async (req, res) => {
 
 // Update contact
 app.post('/api/update-contact',
-    body('userId').notEmpty().withMessage('User ID is required.'),
-    body('contactId').notEmpty().withMessage('Contact ID is required.'),
-    body('newName').notEmpty().withMessage('New name is required.'),
+    body('userId').trim().escape().notEmpty().withMessage('User ID is required.'),
+    body('contactId').trim().escape().notEmpty().withMessage('Contact ID is required.'),
+    body('newName').trim().escape().notEmpty().withMessage('New name is required.'),
     async (req, res) => {
         const validationErrors = validationResult(req);
         if (!validationErrors.isEmpty()) {
-            return res.status(400).json({ success: false, errors: validationErrors.array() });
+            return res.status(400).json({ success: false, message: 'Input validation failed.', errors: validationErrors.array() });
         }
 
         const { userId, contactId, newName } = req.body;
@@ -605,38 +620,70 @@ app.post('/api/update-contact',
         try {
             const contactUser = await User.findOne({ xameId: contactId }).select('_id');
             if (!contactUser) {
-                return res.status(404).json({ success: false, message: 'Contact not found.' });
+                return res.status(404).json({ success: false, message: 'The user you are trying to contact was not found.' });
             }
 
-            const result = await User.updateOne(
-                { xameId: userId, 'contacts.contactId': contactUser._id },
-                { $set: { 'contacts.$.customName': newName } }
+            let result = await User.updateOne(
+                {
+                    xameId: userId,
+                    'contacts.contactId': contactUser._id
+                },
+                {
+                    $set: { 'contacts.$.customName': newName }
+                }
             );
 
             if (result.matchedCount === 0) {
                 const user = await User.findOne({ xameId: userId });
-                user.contacts.push({ contactId: contactUser._id, customName: newName });
-                await user.save();
+                if (!user) {
+                    return res.status(404).json({ success: false, message: 'Your user profile was not found.' });
+                }
+
+                const contactExists = user.contacts.some(c => c.contactId && c.contactId.toString() === contactUser._id.toString());
+
+                if (!contactExists) {
+                    user.contacts.push({
+                        contactId: contactUser._id,
+                        customName: newName
+                    });
+                    await user.save();
+                    console.log(`✅ Contact ${contactId} ADDED with custom name ${newName} for user ${userId}.`);
+                } else {
+                    await user.save();
+                    console.log(`✅ Contact ${contactId} already exists but failed atomic update. Re-saving user document.`);
+                }
+
+                result = { modifiedCount: 1 };
             }
 
-            res.json({ success: true, message: 'Contact updated.' });
+            console.log(`✅ Contact name for ${contactId} updated to ${newName} for user ${userId}.`);
 
+            res.json({
+                success: true,
+                message: 'Contact name updated successfully.',
+                updatedName: newName
+            });
         } catch (error) {
-            console.error('Update contact error:', error);
-            res.status(500).json({ success: false, message: 'Server error.' });
+            console.error(`🔴 MongoDB Update/Add Error for user ${userId} and contact ${contactId}:`, error);
+            res.status(500).json({ success: false, message: 'A critical server error occurred during the save operation. Please try again.' });
         }
     }
 );
 
 // Delete chat and contact
 app.post('/api/delete-chat-and-contact',
-    body('userId').notEmpty(),
-    body('contactId').notEmpty(),
+    body('userId').trim().escape().notEmpty().withMessage('User ID is required.'),
+    body('contactId').trim().escape().notEmpty().withMessage('Contact ID is required.'),
     async (req, res) => {
+        const validationErrors = validationResult(req);
+        if (!validationErrors.isEmpty()) {
+            return res.status(400).json({ success: false, message: 'Input validation failed.', errors: validationErrors.array() });
+        }
+
         const { userId, contactId } = req.body;
 
         if (userId === contactId) {
-            return res.status(403).json({ success: false, message: 'Cannot delete self.' });
+            return res.status(403).json({ success: false, message: 'Cannot delete the self chat.' });
         }
 
         try {
@@ -656,21 +703,220 @@ app.post('/api/delete-chat-and-contact',
                 ]
             });
 
+            let contactDeleted = false;
             if (contactToDelete) {
-                await User.updateOne(
+                const contactResult = await User.updateOne(
                     { xameId: userId },
                     { $pull: { contacts: { contactId: contactToDelete._id } } }
                 );
+                if (contactResult.modifiedCount > 0) {
+                    contactDeleted = true;
+                }
             }
 
-            res.json({ success: true, message: 'Contact and history deleted.' });
+            console.log(`✅ Permanent chat/contact deletion complete for user ${userId} and contact ${contactId}.`);
 
+            res.json({
+                success: true,
+                message: `Contact and all chat history permanently deleted. (Contact list entry removed: ${contactDeleted})`
+            });
         } catch (error) {
-            console.error('Delete error:', error);
-            res.status(500).json({ success: false, message: 'Server error.' });
+            console.error(`🔴 Critical Error during permanent chat/contact deletion for user ${userId} and contact ${contactId}:`, error);
+            res.status(500).json({ success: false, message: 'A critical server error occurred during the permanent deletion operation.' });
         }
     }
 );
+
+// ============================================================
+// MIGRATION ENDPOINTS
+// ============================================================
+
+// Migrate profile pictures from file paths to base64
+app.post('/api/migrate-profile-pictures', async (req, res) => {
+    try {
+        const users = await User.find({ 
+            profilePic: { $exists: true, $ne: '' },
+            $or: [
+                { profilePic: { $regex: '^/media/profile_pics/' } },
+                { profilePic: { $regex: '^/uploads/' } }
+            ]
+        });
+
+        let migrated = 0;
+        let failed = 0;
+        const errors = [];
+
+        for (const user of users) {
+            try {
+                const filePath = path.join(__dirname, user.profilePic);
+                
+                if (fs.existsSync(filePath)) {
+                    const imageBuffer = await fsPromises.readFile(filePath);
+                    const ext = path.extname(filePath).toLowerCase();
+                    
+                    let mimeType = 'image/jpeg';
+                    if (ext === '.png') mimeType = 'image/png';
+                    else if (ext === '.gif') mimeType = 'image/gif';
+                    else if (ext === '.webp') mimeType = 'image/webp';
+                    
+                    const base64Image = `data:${mimeType};base64,${imageBuffer.toString('base64')}`;
+                    
+                    user.profilePic = base64Image;
+                    await user.save();
+                    
+                    migrated++;
+                    console.log(`✅ Migrated profile picture for user: ${user.xameId}`);
+                } else {
+                    user.profilePic = '';
+                    await user.save();
+                    failed++;
+                    errors.push(`File not found for user ${user.xameId}: ${user.profilePic}`);
+                    console.log(`⚠️ File not found for user: ${user.xameId}, cleared path`);
+                }
+            } catch (error) {
+                failed++;
+                errors.push(`Error migrating user ${user.xameId}: ${error.message}`);
+                console.error(`❌ Failed to migrate user ${user.xameId}:`, error);
+            }
+        }
+
+        res.json({
+            success: true,
+            message: 'Profile picture migration completed',
+            stats: {
+                total: users.length,
+                migrated: migrated,
+                failed: failed,
+                errors: errors
+            }
+        });
+
+        console.log(`\n${'='.repeat(60)}`);
+        console.log('📊 PROFILE PICTURE MIGRATION SUMMARY');
+        console.log(`${'='.repeat(60)}`);
+        console.log(`Total users processed: ${users.length}`);
+        console.log(`Successfully migrated: ${migrated}`);
+        console.log(`Failed/Not found: ${failed}`);
+        console.log(`${'='.repeat(60)}\n`);
+
+    } catch (error) {
+        console.error('Migration error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Migration failed', 
+            error: error.message 
+        });
+    }
+});
+
+// ✅ NEW: Migrate message attachments from file paths to base64
+app.post('/api/migrate-message-attachments', async (req, res) => {
+    try {
+        const messages = await Message.find({ 
+            'file.url': { $exists: true, $ne: '' },
+            'file.url': { $regex: '^/uploads/' }
+        });
+
+        let migrated = 0;
+        let failed = 0;
+        const errors = [];
+
+        for (const message of messages) {
+            try {
+                const filePath = path.join(__dirname, message.file.url);
+                
+                if (fs.existsSync(filePath)) {
+                    const fileBuffer = await fsPromises.readFile(filePath);
+                    const ext = path.extname(filePath).toLowerCase();
+                    
+                    // Determine mime type
+                    let mimeType = message.file.type || 'application/octet-stream';
+                    
+                    const base64Data = `data:${mimeType};base64,${fileBuffer.toString('base64')}`;
+                    
+                    // Update message with base64 data
+                    message.file.data = base64Data;
+                    delete message.file.url; // Remove old url field
+                    
+                    await message.save();
+                    
+                    migrated++;
+                    console.log(`✅ Migrated attachment for message: ${message.messageId}`);
+                } else {
+                    // File not found, remove file reference
+                    message.file = undefined;
+                    await message.save();
+                    failed++;
+                    errors.push(`File not found for message ${message.messageId}: ${message.file.url}`);
+                    console.log(`⚠️ File not found for message: ${message.messageId}, cleared attachment`);
+                }
+            } catch (error) {
+                failed++;
+                errors.push(`Error migrating message ${message.messageId}: ${error.message}`);
+                console.error(`❌ Failed to migrate message ${message.messageId}:`, error);
+            }
+        }
+
+        res.json({
+            success: true,
+            message: 'Message attachment migration completed',
+            stats: {
+                total: messages.length,
+                migrated: migrated,
+                failed: failed,
+                errors: errors
+            }
+        });
+
+        console.log(`\n${'='.repeat(60)}`);
+        console.log('📊 MESSAGE ATTACHMENT MIGRATION SUMMARY');
+        console.log(`${'='.repeat(60)}`);
+        console.log(`Total messages processed: ${messages.length}`);
+        console.log(`Successfully migrated: ${migrated}`);
+        console.log(`Failed/Not found: ${failed}`);
+        console.log(`${'='.repeat(60)}\n`);
+
+    } catch (error) {
+        console.error('Migration error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Migration failed', 
+            error: error.message 
+        });
+    }
+});
+
+// ✅ NEW: Run all migrations at once
+app.post('/api/migrate-all', async (req, res) => {
+    try {
+        console.log('\n🔄 Starting full migration process...\n');
+        
+        // Migrate profile pictures
+        const profilePicResponse = await fetch(`http://localhost:${PORT}/api/migrate-profile-pictures`, {
+            method: 'POST'
+        }).then(r => r.json());
+        
+        // Migrate message attachments
+        const attachmentResponse = await fetch(`http://localhost:${PORT}/api/migrate-message-attachments`, {
+            method: 'POST'
+        }).then(r => r.json());
+        
+        res.json({
+            success: true,
+            message: 'All migrations completed',
+            profilePictures: profilePicResponse.stats,
+            messageAttachments: attachmentResponse.stats
+        });
+        
+    } catch (error) {
+        console.error('Full migration error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Full migration failed', 
+            error: error.message 
+        });
+    }
+});
 
 // ============================================================
 // SOCKET.IO HANDLERS
@@ -717,10 +963,15 @@ io.on('connection', (socket) => {
                     chatHistory[contactId] = [];
                 }
 
+                // ✅ UPDATED: Use file.data instead of file.url
                 const formattedMsg = {
                     id: msg.messageId,
                     text: msg.text,
-                    file: msg.file,
+                    file: msg.file ? {
+                        url: msg.file.data || msg.file.url, // Support both new and old format
+                        name: msg.file.name,
+                        type: msg.file.type
+                    } : undefined,
                     type: msg.senderId === userId ? 'sent' : 'received',
                     ts: msg.ts,
                     status: msg.status
@@ -748,6 +999,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // ✅ UPDATED: Send message now expects file.url to be base64 data URI
     socket.on('send-message', async (data, callback) => {
         const { recipientId, message } = data;
         const senderId = socketToUserMap.get(socket.id);
@@ -760,7 +1012,13 @@ io.on('connection', (socket) => {
                 recipientId: recipientId,
                 ts: message.ts,
                 ...(message.text && { text: message.text }),
-                ...(message.file && { file: message.file })
+                ...(message.file && message.file.url && { 
+                    file: {
+                        data: message.file.url, // Base64 data URI
+                        name: message.file.name,
+                        type: message.file.type
+                    }
+                })
             };
 
             const newMessage = new Message(newMessageData);
@@ -1048,10 +1306,24 @@ server.listen(PORT, "0.0.0.0", () => {
     console.log(`📡 Server running on port: ${PORT}`);
     console.log(`🌐 Public access: http://0.0.0.0:${PORT}`);
     console.log(`📁 Serving files from: ${__dirname}`);
-    console.log(`📂 Uploads directory: ${uploadDir}`);
     console.log(`🗄️  MongoDB: ${MONGODB_URI ? 'Connected' : 'Not configured'}`);
     console.log(`🔐 Password authentication: ENABLED`);
     console.log(`🖼️  Profile pictures: Stored as base64 in MongoDB`);
-    console.log(`🎤 Voice notes & files: Stored on ${process.env.RENDER ? 'Render persistent disk' : 'local filesystem'}`);
+    console.log(`📎 Message attachments: Stored as base64 in MongoDB`);
+    console.log('='.repeat(60));
+    console.log('\n📋 Migration Endpoints Available:');
+    console.log('   POST /api/migrate-profile-pictures');
+    console.log('   POST /api/migrate-message-attachments');
+    console.log('   POST /api/migrate-all (runs both migrations)');
+    console.log('='.repeat(60));
+});
+    console.log(`🔐 Password authentication: ENABLED`);
+    console.log(`🖼️  Profile pictures: Stored as base64 in MongoDB`);
+    console.log(`📎 Message attachments: Stored as base64 in MongoDB`);
+    console.log('='.repeat(60));
+    console.log('\n📋 Migration Endpoints Available:');
+    console.log('   POST /api/migrate-profile-pictures');
+    console.log('   POST /api/migrate-message-attachments');
+    console.log('   POST /api/migrate-all (runs both migrations)');
     console.log('='.repeat(60));
 });
