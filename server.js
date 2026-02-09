@@ -1088,12 +1088,12 @@ app.get('/', (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 
-server.listen(PORT, "0.0.0.0", () => {
+server.listen(PORT, () => {
     console.log('='.repeat(60));
     console.log('✅ XamePage Server v2.1 Started Successfully');
     console.log('='.repeat(60));
     console.log(`📡 Server running on port: ${PORT}`);
-    console.log(`🌐 Public access: http://0.0.0.0:${PORT}`);
+    console.log(`🌐 Local access: http://localhost:${PORT}`);
     console.log(`📁 Serving files from: ${__dirname}`);
     console.log(`📂 Uploads directory: ${uploadDir}`);
     console.log(`🗄️  MongoDB: ${MONGODB_URI ? 'Connected' : 'Not configured'}`);
