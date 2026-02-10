@@ -25,7 +25,7 @@ const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
 const cors = require('cors');
 const { body, validationResult } = require('express-validator');
-const bcrypt = require('bcryptjs'); // ✅ ADDED
+const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
 // ============================================================
@@ -48,6 +48,19 @@ const io = new Server(server, {
 // Middleware
 app.use(express.json());
 app.use(cors());
+
+// ============================================================
+// CROSS-PLATFORM PATH CONFIGURATION
+// ============================================================
+
+// Use process.cwd() instead of __dirname for better compatibility
+const BASE_DIR = process.cwd();
+const uploadDir = path.join(BASE_DIR, 'uploads');
+const profilePicsDir = path.join(BASE_DIR, 'media', 'profile_pics');
+
+console.log(`📁 Base directory: ${BASE_DIR}`);
+console.log(`📂 Upload directory: ${uploadDir}`);
+console.log(`🖼️  Profile pics directory: ${profilePicsDir}`);
 
 // ============================================================
 // MONGODB CONFIGURATION
@@ -80,14 +93,13 @@ const contactSchema = new mongoose.Schema({
     addedAt: { type: Date, default: Date.now }
 });
 
-// ✅ UPDATED: Added password field
 const userSchema = new mongoose.Schema({
     xameId: { type: String, required: true, unique: true },
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
     preferredName: { type: String, default: '' },
     dob: { type: String, required: true },
-    password: { type: String, required: true }, // ✅ ADDED
+    password: { type: String, required: true },
     profilePic: { type: String, default: '' },
     hidePreferredName: { type: Boolean, default: false },
     hideProfilePicture: { type: Boolean, default: false },
@@ -132,24 +144,31 @@ const CallHistory = mongoose.model('CallHistory', callHistorySchema);
 // FILE UPLOAD CONFIGURATION
 // ============================================================
 
-const upload = multer({ dest: 'uploads/' });
+const upload = multer({ dest: uploadDir });
 
 // Create necessary directories
-const uploadDir = path.join(__dirname, 'uploads');
-const profilePicsDir = path.join(__dirname, 'media', 'profile_pics');
+async function createDirectories() {
+    try {
+        if (!fs.existsSync(uploadDir)) {
+            await fsPromises.mkdir(uploadDir, { recursive: true });
+            console.log('✅ Created uploads directory');
+        }
 
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-    console.log('✅ Created uploads directory');
+        if (!fs.existsSync(profilePicsDir)) {
+            await fsPromises.mkdir(profilePicsDir, { recursive: true });
+            console.log('✅ Created profile pics directory');
+        }
+    } catch (error) {
+        console.error('❌ Error creating directories:', error);
+        process.exit(1);
+    }
 }
 
-if (!fs.existsSync(profilePicsDir)) {
-    fs.mkdirSync(profilePicsDir, { recursive: true });
-    console.log('✅ Created profile pics directory');
-}
+// Call this before starting the server
+createDirectories();
 
-// Serve static files
-app.use(express.static(__dirname));
+// Serve static files - using BASE_DIR instead of __dirname
+app.use(express.static(BASE_DIR));
 app.use('/media/profile_pics', express.static(profilePicsDir));
 app.use('/uploads', express.static(uploadDir));
 
@@ -340,22 +359,21 @@ async function getFullContactData(userId) {
 // API ENDPOINTS
 // ============================================================
 
-// ✅ UPDATED: Registration with password hashing
+// Registration with password hashing
 app.post('/api/register',
     body('firstName').trim().escape().notEmpty().withMessage('First name is required.'),
     body('lastName').trim().escape().notEmpty().withMessage('Last name is required.'),
     body('dob').isDate({ format: 'YYYY-MM-DD' }).withMessage('Date of birth must be YYYY-MM-DD.'),
-    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters.'), // ✅ ADDED
+    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters.'),
     async (req, res) => {
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
             return res.status(400).json({ success: false, errors: errors.array() });
         }
 
-        const { firstName, lastName, dob, password } = req.body; // ✅ ADDED password
+        const { firstName, lastName, dob, password } = req.body;
 
         try {
-            // ✅ Hash the password
             const hashedPassword = await bcrypt.hash(password, 10);
             
             const xameId = await generateUniqueXameId();
@@ -364,13 +382,12 @@ app.post('/api/register',
                 firstName, 
                 lastName, 
                 dob,
-                password: hashedPassword // ✅ Save hashed password
+                password: hashedPassword
             });
             await newUser.save();
             
             console.log(`✅ User registered: ${newUser.xameId}`);
             
-            // ✅ Don't send password back to client
             const userResponse = newUser.toObject();
             delete userResponse.password;
             
@@ -382,16 +399,16 @@ app.post('/api/register',
     }
 );
 
-// ✅ UPDATED: Login with password verification
+// Debug endpoint
 app.get('/check-db', async (req, res) => {
     const user = await User.findOne({ profilePic: { $ne: '' } });
-    res.send(user.profilePic.substring(0, 50));
+    res.send(user ? user.profilePic.substring(0, 50) : 'No user with profile pic found');
 });
 
+// Login with password verification
 app.post('/api/login', async (req, res) => {
-    const { xameId, password } = req.body; // ✅ ADDED password
+    const { xameId, password } = req.body;
     
-    // ✅ Validate input
     if (!xameId) {
         return res.status(400).json({ 
             success: false, 
@@ -416,7 +433,6 @@ app.post('/api/login', async (req, res) => {
             });
         }
         
-        // ✅ Check if user has no password (legacy user - migration needed)
         if (!user.password) {
             return res.status(403).json({ 
                 success: false, 
@@ -425,7 +441,6 @@ app.post('/api/login', async (req, res) => {
             });
         }
         
-        // ✅ Verify password
         const passwordMatch = await bcrypt.compare(password, user.password);
         
         if (!passwordMatch) {
@@ -435,11 +450,9 @@ app.post('/api/login', async (req, res) => {
             });
         }
         
-        // ✅ Login successful
         userToSocketMap.set(user.xameId, `placeholder_socket_${user.xameId}`);
         console.log(`✅ User logged in: ${user.xameId}`);
 
-        // ✅ Don't send password to client
         const userWithPrivacy = {
             ...user.toObject(),
             privacySettings: {
@@ -447,7 +460,7 @@ app.post('/api/login', async (req, res) => {
                 hideProfilePicture: user.hideProfilePicture
             }
         };
-        delete userWithPrivacy.password; // ✅ Remove password from response
+        delete userWithPrivacy.password;
 
         res.json({ success: true, user: userWithPrivacy });
     } catch (error) {
@@ -538,13 +551,13 @@ app.post('/api/update-profile', upload.single('profilePic'), async (req, res) =>
 
         if (removeProfilePic === 'true') {
             if (user.profilePic) {
-                const oldPath = path.join(__dirname, user.profilePic);
+                const oldPath = path.join(BASE_DIR, user.profilePic);
                 await fsPromises.unlink(oldPath).catch(err => console.error('Failed to delete old profile pic:', err));
             }
             user.profilePic = '';
             console.log(`✅ Profile picture removed for user: ${userId}`);
         } else if (req.file) {
-            const oldProfilePic = user.profilePic ? path.join(__dirname, user.profilePic) : null;
+            const oldProfilePic = user.profilePic ? path.join(BASE_DIR, user.profilePic) : null;
 
             const fileExt = path.extname(req.file.originalname);
             const newFilename = `${userId}${fileExt}`;
@@ -1100,7 +1113,7 @@ io.on('connection', (socket) => {
 // ============================================================
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.sendFile(path.join(BASE_DIR, 'index.html'));
 });
 
 // ============================================================
@@ -1115,7 +1128,7 @@ server.listen(PORT, () => {
     console.log('='.repeat(60));
     console.log(`📡 Server running on port: ${PORT}`);
     console.log(`🌐 Local access: http://localhost:${PORT}`);
-    console.log(`📁 Serving files from: ${__dirname}`);
+    console.log(`📁 Serving files from: ${BASE_DIR}`);
     console.log(`🗄️  MongoDB: ${MONGODB_URI ? 'Connected' : 'Not configured'}`);
     console.log(`🔐 Password authentication: ENABLED`);
     console.log('='.repeat(60));
