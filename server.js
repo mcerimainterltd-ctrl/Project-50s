@@ -5,11 +5,11 @@
 // Compatible with both cloud deployment (Render) and local development (Termux).
 //
 // Features:
-// - MongoDB Atlas for persistent data storage (including ALL files as base64)
+// - MongoDB Atlas for persistent data storage
 // - Socket.IO for real-time messaging and presence
 // - WebRTC signaling for voice/video calls
 // - Privacy-filtered profile data
-// - Secure file uploads (ALL files stored in MongoDB as base64)
+// - Secure file uploads (profile pictures, attachments)
 // - Password authentication with bcrypt
 // - Comprehensive API endpoints
 //
@@ -45,10 +45,22 @@ const io = new Server(server, {
     path: '/socket.io/'
 });
 
-// Middleware - Increased limits for base64 files
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+// Middleware
+app.use(express.json());
 app.use(cors());
+
+// ============================================================
+// CROSS-PLATFORM PATH CONFIGURATION
+// ============================================================
+
+// Use process.cwd() instead of __dirname for better compatibility
+const BASE_DIR = process.cwd();
+const uploadDir = path.join(BASE_DIR, 'uploads');
+const profilePicsDir = path.join(BASE_DIR, 'media', 'profile_pics');
+
+console.log(`📁 Base directory: ${BASE_DIR}`);
+console.log(`📂 Upload directory: ${uploadDir}`);
+console.log(`🖼️  Profile pics directory: ${profilePicsDir}`);
 
 // ============================================================
 // MONGODB CONFIGURATION
@@ -81,7 +93,6 @@ const contactSchema = new mongoose.Schema({
     addedAt: { type: Date, default: Date.now }
 });
 
-// Profile pictures stored as base64 data URI
 const userSchema = new mongoose.Schema({
     xameId: { type: String, required: true, unique: true },
     firstName: { type: String, required: true },
@@ -89,14 +100,13 @@ const userSchema = new mongoose.Schema({
     preferredName: { type: String, default: '' },
     dob: { type: String, required: true },
     password: { type: String, required: true },
-    profilePic: { type: String, default: '' }, // Base64 data URI
+    profilePic: { type: String, default: '' },
     hidePreferredName: { type: Boolean, default: false },
     hideProfilePicture: { type: Boolean, default: false },
     contacts: [contactSchema],
     createdAt: { type: Date, default: Date.now }
 });
 
-// ✅ UPDATED: File attachments now stored as base64 data URI
 const messageSchema = new mongoose.Schema({
     messageId: { type: String, required: true, unique: true },
     senderId: { type: String, required: true, index: true },
@@ -104,7 +114,7 @@ const messageSchema = new mongoose.Schema({
     ts: { type: Number, required: true },
     text: { type: String },
     file: {
-        data: { type: String }, // Base64 data URI (e.g., "data:image/jpeg;base64,...")
+        url: { type: String },
         name: { type: String },
         type: { type: String }
     },
@@ -134,21 +144,33 @@ const CallHistory = mongoose.model('CallHistory', callHistorySchema);
 // FILE UPLOAD CONFIGURATION
 // ============================================================
 
-const upload = multer({ 
-    dest: 'uploads/',
-    limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
-});
+const upload = multer({ dest: uploadDir });
 
-// Create uploads directory (for temporary storage only)
-const uploadDir = path.join(__dirname, 'uploads');
+// Create necessary directories
+async function createDirectories() {
+    try {
+        if (!fs.existsSync(uploadDir)) {
+            await fsPromises.mkdir(uploadDir, { recursive: true });
+            console.log('✅ Created uploads directory');
+        }
 
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-    console.log('✅ Created temporary uploads directory');
+        if (!fs.existsSync(profilePicsDir)) {
+            await fsPromises.mkdir(profilePicsDir, { recursive: true });
+            console.log('✅ Created profile pics directory');
+        }
+    } catch (error) {
+        console.error('❌ Error creating directories:', error);
+        process.exit(1);
+    }
 }
 
-// Serve static files
-app.use(express.static(__dirname));
+// Call this before starting the server
+createDirectories();
+
+// Serve static files - using BASE_DIR instead of __dirname
+app.use(express.static(BASE_DIR));
+app.use('/media/profile_pics', express.static(profilePicsDir));
+app.use('/uploads', express.static(uploadDir));
 
 // ============================================================
 // ONLINE USER STATE MANAGEMENT
@@ -377,6 +399,12 @@ app.post('/api/register',
     }
 );
 
+// Debug endpoint
+app.get('/check-db', async (req, res) => {
+    const user = await User.findOne({ profilePic: { $ne: '' } });
+    res.send(user ? user.profilePic.substring(0, 50) : 'No user with profile pic found');
+});
+
 // Login with password verification
 app.post('/api/login', async (req, res) => {
     const { xameId, password } = req.body;
@@ -476,36 +504,28 @@ app.post('/api/get-user-name', async (req, res) => {
     }
 });
 
-// ✅ UPDATED: File upload now returns base64 data URI
+// File upload
 app.post('/api/upload-file', upload.single('file'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ success: false, message: 'No file uploaded.' });
     }
 
     try {
-        // Read file and convert to base64
-        const fileBuffer = await fsPromises.readFile(req.file.path);
-        const base64Data = `data:${req.file.mimetype};base64,${fileBuffer.toString('base64')}`;
+        const fileExt = path.extname(req.file.originalname);
+        const newFilename = `${uuidv4()}${fileExt}`;
+        const newPath = path.join(uploadDir, newFilename);
 
-        // Clean up temporary file
-        await fsPromises.unlink(req.file.path).catch(err => 
-            console.error('Failed to delete temp file:', err)
-        );
+        await fsPromises.rename(req.file.path, newPath);
 
-        // Return base64 data URI instead of file path
-        res.json({ 
-            success: true, 
-            url: base64Data,
-            name: req.file.originalname,
-            type: req.file.mimetype
-        });
+        const fileUrl = `/uploads/${newFilename}`;
+        res.json({ success: true, url: fileUrl });
     } catch (error) {
         console.error('File processing failed:', error);
         res.status(500).json({ success: false, message: 'File processing failed.' });
     }
 });
 
-// Update profile - stores images as base64 in MongoDB
+// Update profile
 app.post('/api/update-profile', upload.single('profilePic'), async (req, res) => {
     const { userId, preferredName, removeProfilePic, hidePreferredName, hideProfilePicture } = req.body;
 
@@ -530,20 +550,26 @@ app.post('/api/update-profile', upload.single('profilePic'), async (req, res) =>
         }
 
         if (removeProfilePic === 'true') {
+            if (user.profilePic) {
+                const oldPath = path.join(BASE_DIR, user.profilePic);
+                await fsPromises.unlink(oldPath).catch(err => console.error('Failed to delete old profile pic:', err));
+            }
             user.profilePic = '';
             console.log(`✅ Profile picture removed for user: ${userId}`);
         } else if (req.file) {
-            // Read file and convert to base64
-            const imageBuffer = await fsPromises.readFile(req.file.path);
-            const base64Image = `data:${req.file.mimetype};base64,${imageBuffer.toString('base64')}`;
-            
-            user.profilePic = base64Image;
-            console.log(`✅ Profile picture updated for user: ${userId} (stored as base64 in MongoDB)`);
+            const oldProfilePic = user.profilePic ? path.join(BASE_DIR, user.profilePic) : null;
 
-            // Clean up temporary file
-            await fsPromises.unlink(req.file.path).catch(err => 
-                console.error('Failed to delete temp file:', err)
-            );
+            const fileExt = path.extname(req.file.originalname);
+            const newFilename = `${userId}${fileExt}`;
+            const newPath = path.join(profilePicsDir, newFilename);
+
+            await fsPromises.rename(req.file.path, newPath);
+            user.profilePic = `/media/profile_pics/${newFilename}`;
+            console.log(`✅ Profile picture updated for user: ${userId}`);
+
+            if (oldProfilePic) {
+                await fsPromises.unlink(oldProfilePic).catch(err => console.error('Failed to delete old profile pic:', err));
+            }
         }
 
         await user.save();
@@ -728,197 +754,6 @@ app.post('/api/delete-chat-and-contact',
 );
 
 // ============================================================
-// MIGRATION ENDPOINTS
-// ============================================================
-
-// Migrate profile pictures from file paths to base64
-app.post('/api/migrate-profile-pictures', async (req, res) => {
-    try {
-        const users = await User.find({ 
-            profilePic: { $exists: true, $ne: '' },
-            $or: [
-                { profilePic: { $regex: '^/media/profile_pics/' } },
-                { profilePic: { $regex: '^/uploads/' } }
-            ]
-        });
-
-        let migrated = 0;
-        let failed = 0;
-        const errors = [];
-
-        for (const user of users) {
-            try {
-                const filePath = path.join(__dirname, user.profilePic);
-                
-                if (fs.existsSync(filePath)) {
-                    const imageBuffer = await fsPromises.readFile(filePath);
-                    const ext = path.extname(filePath).toLowerCase();
-                    
-                    let mimeType = 'image/jpeg';
-                    if (ext === '.png') mimeType = 'image/png';
-                    else if (ext === '.gif') mimeType = 'image/gif';
-                    else if (ext === '.webp') mimeType = 'image/webp';
-                    
-                    const base64Image = `data:${mimeType};base64,${imageBuffer.toString('base64')}`;
-                    
-                    user.profilePic = base64Image;
-                    await user.save();
-                    
-                    migrated++;
-                    console.log(`✅ Migrated profile picture for user: ${user.xameId}`);
-                } else {
-                    user.profilePic = '';
-                    await user.save();
-                    failed++;
-                    errors.push(`File not found for user ${user.xameId}: ${user.profilePic}`);
-                    console.log(`⚠️ File not found for user: ${user.xameId}, cleared path`);
-                }
-            } catch (error) {
-                failed++;
-                errors.push(`Error migrating user ${user.xameId}: ${error.message}`);
-                console.error(`❌ Failed to migrate user ${user.xameId}:`, error);
-            }
-        }
-
-        res.json({
-            success: true,
-            message: 'Profile picture migration completed',
-            stats: {
-                total: users.length,
-                migrated: migrated,
-                failed: failed,
-                errors: errors
-            }
-        });
-
-        console.log(`\n${'='.repeat(60)}`);
-        console.log('📊 PROFILE PICTURE MIGRATION SUMMARY');
-        console.log(`${'='.repeat(60)}`);
-        console.log(`Total users processed: ${users.length}`);
-        console.log(`Successfully migrated: ${migrated}`);
-        console.log(`Failed/Not found: ${failed}`);
-        console.log(`${'='.repeat(60)}\n`);
-
-    } catch (error) {
-        console.error('Migration error:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Migration failed', 
-            error: error.message 
-        });
-    }
-});
-
-// ✅ NEW: Migrate message attachments from file paths to base64
-app.post('/api/migrate-message-attachments', async (req, res) => {
-    try {
-        const messages = await Message.find({ 
-            'file.url': { $exists: true, $ne: '' },
-            'file.url': { $regex: '^/uploads/' }
-        });
-
-        let migrated = 0;
-        let failed = 0;
-        const errors = [];
-
-        for (const message of messages) {
-            try {
-                const filePath = path.join(__dirname, message.file.url);
-                
-                if (fs.existsSync(filePath)) {
-                    const fileBuffer = await fsPromises.readFile(filePath);
-                    const ext = path.extname(filePath).toLowerCase();
-                    
-                    // Determine mime type
-                    let mimeType = message.file.type || 'application/octet-stream';
-                    
-                    const base64Data = `data:${mimeType};base64,${fileBuffer.toString('base64')}`;
-                    
-                    // Update message with base64 data
-                    message.file.data = base64Data;
-                    delete message.file.url; // Remove old url field
-                    
-                    await message.save();
-                    
-                    migrated++;
-                    console.log(`✅ Migrated attachment for message: ${message.messageId}`);
-                } else {
-                    // File not found, remove file reference
-                    message.file = undefined;
-                    await message.save();
-                    failed++;
-                    errors.push(`File not found for message ${message.messageId}: ${message.file.url}`);
-                    console.log(`⚠️ File not found for message: ${message.messageId}, cleared attachment`);
-                }
-            } catch (error) {
-                failed++;
-                errors.push(`Error migrating message ${message.messageId}: ${error.message}`);
-                console.error(`❌ Failed to migrate message ${message.messageId}:`, error);
-            }
-        }
-
-        res.json({
-            success: true,
-            message: 'Message attachment migration completed',
-            stats: {
-                total: messages.length,
-                migrated: migrated,
-                failed: failed,
-                errors: errors
-            }
-        });
-
-        console.log(`\n${'='.repeat(60)}`);
-        console.log('📊 MESSAGE ATTACHMENT MIGRATION SUMMARY');
-        console.log(`${'='.repeat(60)}`);
-        console.log(`Total messages processed: ${messages.length}`);
-        console.log(`Successfully migrated: ${migrated}`);
-        console.log(`Failed/Not found: ${failed}`);
-        console.log(`${'='.repeat(60)}\n`);
-
-    } catch (error) {
-        console.error('Migration error:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Migration failed', 
-            error: error.message 
-        });
-    }
-});
-
-// ✅ NEW: Run all migrations at once
-app.post('/api/migrate-all', async (req, res) => {
-    try {
-        console.log('\n🔄 Starting full migration process...\n');
-        
-        // Migrate profile pictures
-        const profilePicResponse = await fetch(`http://localhost:${PORT}/api/migrate-profile-pictures`, {
-            method: 'POST'
-        }).then(r => r.json());
-        
-        // Migrate message attachments
-        const attachmentResponse = await fetch(`http://localhost:${PORT}/api/migrate-message-attachments`, {
-            method: 'POST'
-        }).then(r => r.json());
-        
-        res.json({
-            success: true,
-            message: 'All migrations completed',
-            profilePictures: profilePicResponse.stats,
-            messageAttachments: attachmentResponse.stats
-        });
-        
-    } catch (error) {
-        console.error('Full migration error:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Full migration failed', 
-            error: error.message 
-        });
-    }
-});
-
-// ============================================================
 // SOCKET.IO HANDLERS
 // ============================================================
 
@@ -963,15 +798,10 @@ io.on('connection', (socket) => {
                     chatHistory[contactId] = [];
                 }
 
-                // ✅ UPDATED: Use file.data instead of file.url
                 const formattedMsg = {
                     id: msg.messageId,
                     text: msg.text,
-                    file: msg.file ? {
-                        url: msg.file.data || msg.file.url, // Support both new and old format
-                        name: msg.file.name,
-                        type: msg.file.type
-                    } : undefined,
+                    file: msg.file,
                     type: msg.senderId === userId ? 'sent' : 'received',
                     ts: msg.ts,
                     status: msg.status
@@ -999,7 +829,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // ✅ UPDATED: Send message now expects file.url to be base64 data URI
     socket.on('send-message', async (data, callback) => {
         const { recipientId, message } = data;
         const senderId = socketToUserMap.get(socket.id);
@@ -1012,13 +841,7 @@ io.on('connection', (socket) => {
                 recipientId: recipientId,
                 ts: message.ts,
                 ...(message.text && { text: message.text }),
-                ...(message.file && message.file.url && { 
-                    file: {
-                        data: message.file.url, // Base64 data URI
-                        name: message.file.name,
-                        type: message.file.type
-                    }
-                })
+                ...(message.file && { file: message.file })
             };
 
             const newMessage = new Message(newMessageData);
@@ -1290,7 +1113,7 @@ io.on('connection', (socket) => {
 // ============================================================
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.sendFile(path.join(BASE_DIR, 'index.html'));
 });
 
 // ============================================================
@@ -1299,31 +1122,14 @@ app.get('/', (req, res) => {
 
 const PORT = process.env.PORT || 8080;
 
-server.listen(PORT, "0.0.0.0", () => {
+server.listen(PORT, () => {
     console.log('='.repeat(60));
     console.log('✅ XamePage Server v2.1 Started Successfully');
     console.log('='.repeat(60));
     console.log(`📡 Server running on port: ${PORT}`);
-    console.log(`🌐 Public access: http://0.0.0.0:${PORT}`);
-    console.log(`📁 Serving files from: ${__dirname}`);
+    console.log(`🌐 Local access: http://localhost:${PORT}`);
+    console.log(`📁 Serving files from: ${BASE_DIR}`);
     console.log(`🗄️  MongoDB: ${MONGODB_URI ? 'Connected' : 'Not configured'}`);
     console.log(`🔐 Password authentication: ENABLED`);
-    console.log(`🖼️  Profile pictures: Stored as base64 in MongoDB`);
-    console.log(`📎 Message attachments: Stored as base64 in MongoDB`);
-    console.log('='.repeat(60));
-    console.log('\n📋 Migration Endpoints Available:');
-    console.log('   POST /api/migrate-profile-pictures');
-    console.log('   POST /api/migrate-message-attachments');
-    console.log('   POST /api/migrate-all (runs both migrations)');
-    console.log('='.repeat(60));
-    
-    console.log(`🔐 Password authentication: ENABLED`);
-    console.log(`🖼️  Profile pictures: Stored as base64 in MongoDB`);
-    console.log(`📎 Message attachments: Stored as base64 in MongoDB`);
-    console.log('='.repeat(60));
-    console.log('\n📋 Migration Endpoints Available:');
-    console.log('   POST /api/migrate-profile-pictures');
-    console.log('   POST /api/migrate-message-attachments');
-    console.log('   POST /api/migrate-all (runs both migrations)');
     console.log('='.repeat(60));
 });
