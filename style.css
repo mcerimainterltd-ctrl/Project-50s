@@ -1,8 +1,7 @@
 /*
- * XamePage v2.1 Styles - Complete Fixed Version
- * Includes keyboard stability fixes, award-winning aesthetic, and
- * FINAL fix for composer menu positioning (Adjusted to -220px).
- * NOTE: The menu is set to be PERMANENTLY VISIBLE for positioning testing.
+ * XamePage v2.1 Styles - Complete Fixed Version with Full Browser Compatibility
+ * Includes keyboard stability fixes, award-winning aesthetic,
+ * composer menu positioning, and comprehensive browser compatibility fallbacks.
  */
 
 :root {
@@ -23,28 +22,7 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Browser-specific resets for better compatibility */
-input, textarea, select, button {
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  appearance: none;
-  border-radius: 0;
-}
-
-input[type="date"],
-input[type="time"],
-input[type="datetime-local"] {
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-button {
-  -webkit-tap-highlight-color: transparent;
-  tap-highlight-color: transparent;
-}
-
-/* === START OF KEYBOARD STABILITY FIXES === */
-/* 1. HTML and BODY: Removed fixed positioning and overflow: hidden */
+/* === BROWSER COMPATIBILITY: HTML and BODY === */
 html, body {
   height: 100%;
   margin: 0;
@@ -56,7 +34,6 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
   width: 100%;
 }
-/* === END OF KEYBOARD STABILITY FIXES === */
 
 .hidden { 
   display: none !important; 
@@ -74,7 +51,7 @@ html, body {
   border: 0; 
 }
 
-/* ===== APP CONTAINER ===== */
+/* === APP CONTAINER - WITH FALLBACKS === */
 #app {
   height: 100vh; /* Fallback for older browsers */
   height: 100dvh; /* Modern dynamic viewport height */
@@ -85,7 +62,7 @@ html, body {
   min-height: 100dvh; /* Modern */
 }
 
-/* ===== CONTAINERS ===== */
+/* === CONTAINERS === */
 .container { 
   width: 100%; 
   max-width: 768px; 
@@ -127,7 +104,7 @@ html, body {
   text-align: center; 
 }
 
-/* ===== AUTHENTICATION & REGISTRATION ===== */
+/* === AUTHENTICATION & REGISTRATION === */
 .auth-container { 
   flex: 1; 
   display: flex; 
@@ -172,6 +149,9 @@ html, body {
   color: var(--text-primary);
   font-size: 16px;
   transition: box-shadow 0.3s ease, background 0.3s ease;
+  -webkit-appearance: none; /* Browser compatibility */
+  -moz-appearance: none;
+  appearance: none;
 }
 
 .input:focus {
@@ -232,7 +212,9 @@ html, body {
   padding: 0;
   margin: 0;
   outline: none;
+  -webkit-appearance: textfield; /* Browser compatibility */
   -moz-appearance: textfield;
+  appearance: textfield;
   flex-grow: 1;
   flex-shrink: 1;
   min-width: 40px;
@@ -280,6 +262,9 @@ html, body {
   font-size: 16px;
   transition: all 0.3s ease;
   box-shadow: 0 4px 12px var(--shadow-color);
+  -webkit-appearance: none; /* Browser compatibility */
+  -moz-appearance: none;
+  appearance: none;
 }
 
 .btn:hover {
@@ -340,6 +325,9 @@ html, body {
   padding: 8px; 
   border-radius: 50%; 
   transition: background 0.3s ease, color 0.3s ease; 
+  -webkit-appearance: none; /* Browser compatibility */
+  -moz-appearance: none;
+  appearance: none;
 }
 
 .icon-btn:hover { 
@@ -380,18 +368,21 @@ html, body {
   background: var(--dark-card);
   color: var(--text-primary);
   font-size: 16px;
+  -webkit-appearance: none; /* Browser compatibility */
+  -moz-appearance: none;
+  appearance: none;
 }
 
 .search-input:focus { 
   outline: none; 
 }
 
-/* 2. CONTACTS SCREEN: Removed fixed positioning and overflow: hidden */
+/* === CONTACTS SCREEN - WITH FALLBACKS === */
 #contacts {
   display: flex;
   flex-direction: column;
   height: 100vh; /* Fallback */
-  height: 100dvh; /* Modern */
+  height: 100dvh; /* Modern browsers */
   top: 0;
   left: 50%;
   transform: translateX(-50%);
@@ -403,24 +394,21 @@ html, body {
 #contacts .search-bar {
   flex-shrink: 0;
   transform: translateZ(0);
+  -webkit-backface-visibility: hidden; /* Browser compatibility */
   backface-visibility: hidden;
 }
 
-/* === START OF CONTACT LIST FIX === */
+/* === CONTACT LIST === */
 #contactList {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  /* Ensure it is a flex container for its items */
   display: flex;
   flex-direction: column;
-  /* Critical: min-height: 0 works with flex: 1 to prevent content overflow from pushing out the flex parent */
   min-height: 0;
-  /* Add safe area padding at the bottom for an award-winning UI/UX */
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
-/* === END OF CONTACT LIST FIX === */
 
 .list { 
   display: flex; 
@@ -547,12 +535,12 @@ html, body {
   }
 }
 
-/* 3. CHAT SCREEN: Removed fixed positioning and overflow: hidden, set stable height */
+/* === CHAT SCREEN - WITH FALLBACKS === */
 #chat {
   display: flex;
   flex-direction: column;
   height: 100vh; /* Fallback */
-  height: 100dvh; /* Modern */
+  height: 100dvh; /* Modern browsers */
   top: 0;
   left: 50%;
   transform: translateX(-50%);
@@ -574,9 +562,10 @@ html, body {
   position: sticky;
   top: 0;
   width: 100%;
-  Height: 110px;
+  height: 110px;
   z-index: 10;
   transform: translateZ(0);
+  -webkit-backface-visibility: hidden; /* Browser compatibility */
   backface-visibility: hidden;
   will-change: transform;
 }
@@ -625,8 +614,6 @@ html, body {
   position: relative;
   min-height: 0;
   overscroll-behavior: contain;
-  
-  /* Remove bottom padding - let flexbox handle spacing */
   padding-bottom: 0;
   margin-bottom: 0;
 }
@@ -636,6 +623,7 @@ html, body {
   display: none;
 }
 
+/* Browser compatibility for scrollbar hiding */
 .chat-bg::-webkit-scrollbar {
   display: none;
 }
@@ -667,7 +655,7 @@ html, body {
   touch-action: pan-y;
 }
 
-/* ===== COMPOSER - FIXED AT BOTTOM (FULLY VISIBLE) - Old Class Kept for Compatibility ===== */
+/* === COMPOSER - FULLY VISIBLE AT BOTTOM === */
 .composer {
   display: flex !important;
   align-items: center;
@@ -689,7 +677,6 @@ html, body {
   padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
 }
 
-
 @media (min-width: 769px) {
   .composer {
     left: 50%;
@@ -697,7 +684,6 @@ html, body {
   }
 }
 
-/* 4. REMOVED problematic positioning from composer-top */
 .composer-top {
   display: flex;
   align-items: center;
@@ -727,6 +713,9 @@ html, body {
   outline: none;
   scroll-margin-bottom: 0;
   scroll-padding-bottom: 0;
+  -webkit-appearance: none; /* Browser compatibility */
+  -moz-appearance: none;
+  appearance: none;
 }
 
 .composer .input:focus {
@@ -781,7 +770,7 @@ html, body {
   box-shadow: 0 10px 30px rgba(0,0,0,.3);
   transform-origin: top right;
   animation: fadeInScale 0.2s ease-out forwards;
-  pointer-events: auto; /* For general menus */
+  pointer-events: auto;
 }
 
 .right-aligned-menu .menu-panel {
@@ -830,6 +819,7 @@ html, body {
   place-items: center; 
   z-index: 1000;
   transform: translateZ(0);
+  -webkit-backface-visibility: hidden; /* Browser compatibility */
   backface-visibility: hidden;
 }
 
@@ -1084,6 +1074,7 @@ html, body {
   z-index: 20;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   transform: translateZ(0);
+  -webkit-backface-visibility: hidden; /* Browser compatibility */
   backface-visibility: hidden;
 }
 
@@ -1193,10 +1184,7 @@ html, body {
   font-size: 24px;
 }
 
-/* ///////////////////////////////////////////////////*/
-/* NEW MEDIA BUBBLES STRUCTURE*/
-
-
+/* === MEDIA BUBBLES === */
 .image-preview {
   position: relative;
   max-width: 300px;
@@ -1313,7 +1301,6 @@ html, body {
   display: block;
   border-radius: 12px;
 }
-
 
 .file-info {
   padding: 8px;
@@ -1553,15 +1540,14 @@ html, body {
   justify-content: center;
 }
 
-/*//////////////////////////////////////////////////////*/
-
+/* === VIDEO CALL OVERLAY - WITH FALLBACKS === */
 #videoCallOverlay {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100vh; /* Fallback */
-  height: 100dvh; /* Modern */
+  height: 100dvh; /* Modern browsers */
   background-color: var(--dark-bg);
   z-index: 2000;
   display: flex;
@@ -1570,6 +1556,7 @@ html, body {
   align-items: center;
   overflow: hidden;
   transform: translateZ(0);
+  -webkit-backface-visibility: hidden; /* Browser compatibility */
   backface-visibility: hidden;
 }
 
@@ -1610,7 +1597,7 @@ html, body {
   background-color: rgba(0, 0, 0, 0.4);
   border-radius: 50px;
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px); /* Browser compatibility */
   z-index: 1000;
 }
 
@@ -1646,7 +1633,7 @@ html, body {
   color: #fff;
   background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px); /* Browser compatibility */
   border-radius: 50%;
 }
 
@@ -1665,6 +1652,7 @@ html, body {
   gap: 20px;
   animation: slide-up 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
   transform: translateZ(0);
+  -webkit-backface-visibility: hidden; /* Browser compatibility */
   backface-visibility: hidden;
 }
 
@@ -1771,10 +1759,6 @@ html, body {
 
 .call-btn.btn-decline .btn-icon {
   background-color: var(--danger);
-}
-
-.call-btn .btn-icon:active {
-  transform: scale(0.95);
 }
 
 @keyframes slide-up {
@@ -1928,11 +1912,10 @@ html, body {
   gap: 5px;
 }
 
-/* ===== COMPOSER STYLES (New Design) ===== */
+/* === NEW COMPOSER DESIGN === */
 .composer-container {
-  /* This is the new root element replacing the old #composer form */
   display: flex !important;
-  align-items: flex-end; /* Align to the bottom of the icons */
+  align-items: flex-end;
   gap: 8px;
   padding: 8px 16px;
   background: var(--dark-card);
@@ -1949,23 +1932,25 @@ html, body {
 }
 
 .composer-icon {
-    /* Style for the 3-dot menu and the action-icon-btn */
-    width: 44px;
-    height: 44px;
-    font-size: 20px;
-    background-color: var(--dark-bg); /* Dark background matching the text input */
-    color: var(--text-secondary); /* Softer color for the icon itself */
-    border-radius: 50%;
-    padding: 0;
-    display: grid;
-    place-items: center;
-    flex-shrink: 0;
-    transition: all 0.2s ease;
-    border: 1px solid var(--divider-color); 
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+  background-color: var(--dark-bg);
+  color: var(--text-secondary);
+  border-radius: 50%;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  border: 1px solid var(--divider-color);
+  -webkit-appearance: none; /* Browser compatibility */
+  -moz-appearance: none;
+  appearance: none;
 }
 
 .composer-icon:hover {
-  background-color: #2c3a47; /* Darker hover effect */
+  background-color: #2c3a47;
   transform: scale(1.05);
   color: var(--text-primary);
 }
@@ -1975,112 +1960,92 @@ html, body {
   background: var(--dark-bg);
   padding: 12px 18px;
   border: none;
-  /* Match the rounded style of other inputs but slightly smaller for composer */
-  border-radius: 22px; 
+  border-radius: 22px;
   color: var(--text-primary);
   font-size: 16px;
   outline: none;
-  min-height: 44px; /* Match the icon height */
+  min-height: 44px;
   transition: background 0.3s ease;
-  line-height: 1.4; /* Better text vertical centering */
-  max-height: 100px; /* Prevent it from growing too large */
+  line-height: 1.4;
+  max-height: 100px;
+  -webkit-appearance: none; /* Browser compatibility */
+  -moz-appearance: none;
+  appearance: none;
 }
 
-/* Style for the 3-dot menu wrapper to position the dropdown */
 #more-options-menu {
   position: relative;
   flex-shrink: 0;
-  height: 44px; /* Explicit height to match the icon button */
+  height: 44px;
 }
 
 #more-options-btn .icon {
-  color: inherit; 
-}
-/* === END: NEW AWARD-WINNING COMPOSER STYLES === */
-
-/* --- NEW AWARD-WINNING COMPOSER MENU STYLING (ADJUSTED POSITION TEST) --- */
-
-/* 1. Ensure the button wrapper provides the positioning context */
-#more-options-menu {
-  position: relative; /* CRITICAL: All children, including the dropdown, position relative to this */
-  flex-shrink: 0;
-  height: 44px; /* Explicit height to match the icon button */
+  color: inherit;
 }
 
-/* 2. Style for the dropdown container (#more-options-dropdown) */
+/* === COMPOSER DROPDOWN MENU === */
 #more-options-dropdown {
-    /* CRITICAL POSITIONING FIX */
-    position: absolute !important; 
-    
-    /* Puts the full menu height above the button wrapper.
-       ADJUSTED: Reduced the offset to -220px to bring it closer to the button. */
-    top: -220px !important; 
-    
-    left: 0 !important; /* Anchors the left edge of the menu to the button's position */
-    right: auto !important; 
-    
-    /* --- TEMPORARY: FORCES VISIBILITY TO TEST POSITIONING --- */
-    opacity: 1 !important;         /* FORCES: Always visible */
-    visibility: visible !important; /* FORCES: Always visible */
-    transform: translateY(0) !important; /* FORCES: No animation offset */
-    
-    z-index: 10000; /* Highest z-index */
-    
-    /* Layout and Look */
-    display: flex; /* Keep display: flex so height can be calculated */
-    flex-direction: column;
-    background: var(--dark-card); 
-    border: 1px solid var(--divider-color);
-    border-radius: 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5); 
-    min-width: 180px; 
-    padding: 8px 0; 
-    transform-origin: bottom left; 
-    pointer-events: auto !important; /* Enable clicks */
+  position: absolute !important;
+  top: -220px !important;
+  left: 0 !important;
+  right: auto !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: translateY(0) !important;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  background: var(--dark-card);
+  border: 1px solid var(--divider-color);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  min-width: 180px;
+  padding: 8px 0;
+  transform-origin: bottom left;
+  pointer-events: auto !important;
 }
 
-/* 3. Style for the individual menu items (buttons) - unchanged for stability */
 #more-options-dropdown .dropdown-item {
-    color: var(--text-primary); 
-    background: transparent; 
-    border: none;
-    text-align: left;
-    width: 100%;
-    
-    padding: 12px 18px; 
-    display: flex; 
-    align-items: center;
-    gap: 12px; 
-    transition: background 0.2s ease;
-    font-size: 16px;
-    cursor: pointer;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  text-align: left;
+  width: 100%;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: background 0.2s ease;
+  font-size: 16px;
+  cursor: pointer;
 }
 
 #more-options-dropdown .dropdown-item:hover {
-    background: #2c3a47; 
+  background: #2c3a47;
 }
 
-/* 4. Explicit, Award-Winning colors for the composer menu icons - unchanged for stability */
-#more-options-dropdown .dropdown-item .icon { 
-    font-size: 20px; 
-    color: var(--text-secondary); 
-}
-#more-options-dropdown #attachBtn .icon { 
-    color: var(--text-secondary); 
-}
-#more-options-dropdown #menu-voice-note-btn .icon { 
-    color: var(--accent-color); 
-}
-#more-options-dropdown #menu-voice-to-text-btn .icon { 
-    color: #FFD700; 
-}
-#more-options-dropdown #menu-camera-btn .icon { 
-    color: var(--secondary-accent); 
+#more-options-dropdown .dropdown-item .icon {
+  font-size: 20px;
+  color: var(--text-secondary);
 }
 
-/* --- END NEW AWARD-WINNING COMPOSER MENU STYLING (ADJUSTED POSITION TEST) --- */
+#more-options-dropdown #attachBtn .icon {
+  color: var(--text-secondary);
+}
 
-/* ===== AWARD-WINNING CAMERA MODAL - PROFESSIONAL LAYOUT ===== */
+#more-options-dropdown #menu-voice-note-btn .icon {
+  color: var(--accent-color);
+}
+
+#more-options-dropdown #menu-voice-to-text-btn .icon {
+  color: #FFD700;
+}
+
+#more-options-dropdown #menu-camera-btn .icon {
+  color: var(--secondary-accent);
+}
+
+/* === CAMERA MODAL - WITH FALLBACKS === */
 .camera-modal {
   position: fixed;
   z-index: 10000;
@@ -2091,17 +2056,15 @@ html, body {
   padding: 0;
   margin: 0;
   transform: translateZ(0);
+  -webkit-backface-visibility: hidden; /* Browser compatibility */
   backface-visibility: hidden;
   animation: cameraFadeIn 0.3s ease-out;
   isolation: isolate !important;
-  
-  /* DEFAULT: THUMBNAIL MODE */
   width: 300px !important;
   height: 400px !important;
   border-radius: 16px !important;
   overflow: hidden !important;
   box-shadow: 0 20px 60px rgba(0,0,0,0.5) !important;
-  position: fixed !important;
   bottom: 20px !important;
   right: 40px !important;
   top: auto !important;
@@ -2109,11 +2072,11 @@ html, body {
 }
 
 @keyframes cameraFadeIn {
-  from { 
+  from {
     opacity: 0;
     transform: scale(0.8) translateY(20px);
   }
-  to { 
+  to {
     opacity: 1;
     transform: scale(1) translateY(0);
   }
@@ -2123,33 +2086,30 @@ html, body {
   display: none !important;
 }
 
-/* FULLSCREEN MODE - User selectable */
 .camera-modal.fullscreen {
   width: 100vw !important;
-  height: 100vh !important;
+  height: 100vh !important; /* Fallback */
+  height: 100dvh !important; /* Modern browsers */
   border-radius: 0 !important;
   position: fixed !important;
   top: 0 !important;
   left: 0 !important;
   right: 0 !important;
   bottom: 0 !important;
-  bottom: auto !important;
-  right: auto !important;
   animation: fullscreenFadeIn 0.3s ease-out;
 }
 
 @keyframes fullscreenFadeIn {
-  from { 
+  from {
     opacity: 0;
     transform: scale(1.1);
   }
-  to { 
+  to {
     opacity: 1;
     transform: scale(1);
   }
 }
 
-/* HALFSCREEN MODE - FULL COVERAGE (NO BLOCKING) */
 .camera-modal.halfscreen {
   width: 70vw !important;
   height: 70vh !important;
@@ -2168,17 +2128,16 @@ html, body {
 }
 
 @keyframes halfscreenFadeIn {
-  from { 
+  from {
     opacity: 0;
     transform: translate(-50%, -50%) scale(0.9);
   }
-  to { 
+  to {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
 }
 
-/* FIXED: Halfscreen content - FULL COVERAGE */
 .camera-modal.halfscreen .camera-modal-content {
   background: #000000;
   margin: 0;
@@ -2197,7 +2156,6 @@ html, body {
   z-index: 10001 !important;
 }
 
-/* FIXED: Camera preview area - TAKES ALL SPACE */
 .camera-modal.halfscreen .camera-preview {
   flex: 1;
   display: flex;
@@ -2207,14 +2165,13 @@ html, body {
   overflow: hidden;
   background: #000;
   width: 100%;
-  height: 100%; /* CHANGED: Use 100% of container */
+  height: 100%;
   min-height: 0;
   border-radius: inherit;
   margin: 0 !important;
   padding: 0 !important;
 }
 
-/* FIXED: Video element - COVERS ENTIRE AREA */
 .camera-modal.halfscreen #camera-video {
   width: 100% !important;
   height: 100% !important;
@@ -2227,41 +2184,38 @@ html, body {
   border-radius: inherit;
 }
 
-/* FIXED: Header - OVERLAY (doesn't take space) */
 .camera-modal.halfscreen .camera-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: rgba(0, 0, 0, 0.7) !important; /* CHANGED: Solid overlay */
+  background: rgba(0, 0, 0, 0.7) !important;
   position: absolute !important;
   top: 0 !important;
   left: 0 !important;
   right: 0 !important;
   z-index: 10;
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px); /* Browser compatibility */
   border-bottom: none !important;
 }
 
-/* FIXED: Controls - OVERLAY (doesn't take space) */
 .camera-modal.halfscreen .camera-controls {
   display: flex;
   flex-direction: row;
   gap: 16px;
   padding: 16px;
-  background: rgba(0, 0, 0, 0.7) !important; /* CHANGED: Solid overlay */
+  background: rgba(0, 0, 0, 0.7) !important;
   position: absolute !important;
   bottom: 0 !important;
   left: 0 !important;
   right: 0 !important;
   z-index: 10;
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px); /* Browser compatibility */
   border-top: none !important;
 }
 
-/* THUMBNAIL MODE - DEFAULT */
 .camera-modal.thumbnail {
   width: 300px !important;
   height: 400px !important;
@@ -2277,17 +2231,16 @@ html, body {
 }
 
 @keyframes thumbnailFadeIn {
-  from { 
+  from {
     opacity: 0;
     transform: scale(0.8) translateY(20px);
   }
-  to { 
+  to {
     opacity: 1;
     transform: scale(1) translateY(0);
   }
 }
 
-/* DEFAULT CAMERA MODAL CONTENT */
 .camera-modal-content {
   background: #000000;
   margin: 0;
@@ -2306,7 +2259,6 @@ html, body {
   z-index: 10001 !important;
 }
 
-/* DEFAULT HEADER */
 .camera-header {
   display: flex;
   justify-content: space-between;
@@ -2319,7 +2271,7 @@ html, body {
   right: 0;
   z-index: 10;
   backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px); /* Browser compatibility */
 }
 
 .camera-header h3 {
@@ -2335,7 +2287,6 @@ html, body {
   align-items: center;
 }
 
-/* SCREEN SIZE TOGGLE BUTTONS */
 .screen-size-toggle {
   display: flex;
   gap: 8px;
@@ -2344,7 +2295,7 @@ html, body {
   border-radius: 20px;
   padding: 4px;
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px); /* Browser compatibility */
 }
 
 .size-toggle-btn {
@@ -2392,7 +2343,7 @@ html, body {
   justify-content: center;
   transition: all 0.3s ease;
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px); /* Browser compatibility */
 }
 
 .camera-header-btn:hover {
@@ -2400,7 +2351,6 @@ html, body {
   transform: scale(1.1);
 }
 
-/* DEFAULT: Camera preview area */
 .camera-preview {
   flex: 1;
   display: flex;
@@ -2415,7 +2365,6 @@ html, body {
   border-radius: inherit;
 }
 
-/* DEFAULT: Video element */
 #camera-video {
   width: 100%;
   height: 100%;
@@ -2431,7 +2380,7 @@ html, body {
 #camera-canvas {
   display: none;
 }
-/* === PROFESSIONAL CAMERA CONTROLS LAYOUT - FIXED === */
+
 .camera-controls {
   display: flex;
   flex-direction: column;
@@ -2444,7 +2393,7 @@ html, body {
   right: 0;
   z-index: 10;
   backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px); /* Browser compatibility */
   border-radius: 0 0 inherit inherit;
 }
 
@@ -2465,7 +2414,6 @@ html, body {
   flex-wrap: wrap;
 }
 
-/* === PROFESSIONAL CAMERA BUTTONS - FIXED VISIBILITY === */
 .camera-btn {
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -2498,7 +2446,6 @@ html, body {
   transform: none !important;
 }
 
-/* Circular action buttons - FIXED VISIBILITY */
 .capture-btn, .record-btn {
   width: 70px;
   height: 70px;
@@ -2525,19 +2472,19 @@ html, body {
 }
 
 .record-btn.recording {
-  animation: pulse-record 1.5s infinite;
+  animation: pulse-record-cam 1.5s infinite;
   background: #ff2a2a;
 }
 
-@keyframes pulse-record {
-  0% { 
-    box-shadow: 0 0 0 0 rgba(255, 69, 69, 0.7); 
+@keyframes pulse-record-cam {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 69, 69, 0.7);
   }
-  70% { 
-    box-shadow: 0 0 0 10px rgba(255, 69, 69, 0); 
+  70% {
+    box-shadow: 0 0 0 10px rgba(255, 69, 69, 0);
   }
-  100% { 
-    box-shadow: 0 0 0 0 rgba(255, 69, 69, 0); 
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 69, 69, 0);
   }
 }
 
@@ -2551,7 +2498,6 @@ html, body {
   z-index: 12;
 }
 
-/* FIXED: Switch button visibility in fullscreen */
 .switch-btn {
   width: 50px;
   height: 50px;
@@ -2567,7 +2513,6 @@ html, body {
   position: relative;
 }
 
-/* Button text */
 .camera-btn .btn-text {
   font-size: 12px;
   font-weight: 500;
@@ -2581,7 +2526,6 @@ html, body {
   display: none;
 }
 
-/* === PREVIEW MODE - FIXED COVERAGE === */
 .camera-preview-area {
   position: absolute;
   top: 0;
@@ -2600,7 +2544,6 @@ html, body {
   border-radius: inherit;
 }
 
-/* FIXED: Preview image/video to properly fit container */
 #camera-preview-image {
   max-width: 100%;
   max-height: 100%;
@@ -2657,7 +2600,6 @@ html, body {
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-/* Recording timer */
 .recording-timer {
   position: absolute;
   top: 80px;
@@ -2670,7 +2612,7 @@ html, body {
   font-size: 14px;
   font-weight: 600;
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px); /* Browser compatibility */
   display: none;
   align-items: center;
   gap: 8px;
@@ -2690,7 +2632,6 @@ html, body {
   51%, 100% { opacity: 0; }
 }
 
-/* === CAMERA MODAL RESET === */
 .camera-modal * {
   box-sizing: border-box !important;
 }
@@ -2700,12 +2641,33 @@ html, body {
   cursor: pointer;
 }
 
-.camera-modal.hidden {
-  display: none;
-}
-
-/* Mobile Responsive */
+/* === MOBILE RESPONSIVE === */
 @media (max-width: 768px) {
+  .image-preview,
+  .video-preview,
+  .audio-message-container,
+  .document-preview {
+    max-width: 250px;
+  }
+  
+  .fullscreen-image-container {
+    max-width: 95vw;
+  }
+  
+  .doc-name {
+    font-size: 14px;
+  }
+  
+  .audio-controls {
+    gap: 8px;
+  }
+  
+  #contacts,
+  #chat {
+    left: 0;
+    transform: none;
+  }
+  
   .camera-modal.thumbnail {
     width: 280px !important;
     height: 360px !important;
@@ -2823,44 +2785,17 @@ html, body {
   }
 }
 
-/* Ensure fullscreen mode works across all devices */
 .camera-modal.fullscreen .camera-preview,
 .camera-modal.fullscreen .camera-modal-content {
   width: 100vw !important;
-  height: 100vh !important;
+  height: 100vh !important; /* Fallback */
+  height: 100dvh !important; /* Modern browsers */
 }
 
 .camera-modal.fullscreen #camera-video {
   width: 100vw !important;
-  height: 100vh !important;
-}
-
-
-@media (max-width: 768px) {
-  .image-preview,
-  .video-preview,
-  .audio-message-container,
-  .document-preview {
-    max-width: 250px;
-  }
-  
-  .fullscreen-image-container {
-    max-width: 95vw;
-  }
-  
-  .doc-name {
-    font-size: 14px;
-  }
-  
-  .audio-controls {
-    gap: 8px;
-  }
-  
-  #contacts,
-  #chat {
-    left: 0;
-    transform: none;
-  }
+  height: 100vh !important; /* Fallback */
+  height: 100dvh !important; /* Modern browsers */
 }
 
 .message {
@@ -2901,33 +2836,199 @@ html, body {
   cursor: pointer;
 }
 
-/* Performance optimizations */
+/* === PRIVACY SWITCH STYLES === */
+.privacy-switch-group {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+}
+
+.privacy-label {
+  font-size: 16px;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 50px;
+  height: 26px;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background: var(--divider-color);
+  outline: none;
+  border-radius: 13px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.toggle-switch:checked {
+  background: var(--accent-color);
+}
+
+.toggle-switch::before {
+  content: '';
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: white;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.3s ease;
+}
+
+.toggle-switch:checked::before {
+  transform: translateX(24px);
+}
+
+/* === DROPDOWN MENU STYLES === */
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: var(--dark-card);
+  border: 1px solid var(--divider-color);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  min-width: 180px;
+  overflow: hidden;
+  z-index: 100;
+  animation: fadeInScale 0.2s ease-out;
+}
+
+.dropdown-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: background 0.2s ease;
+}
+
+.dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dropdown-item.danger {
+  color: var(--danger);
+}
+
+.dropdown-item.danger:hover {
+  background: rgba(255, 69, 69, 0.1);
+}
+
+/* === DELETE FAB BUTTON === */
+.delete-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 90px;
+  padding: 16px 24px;
+  background: var(--danger);
+  color: white;
+  border: none;
+  border-radius: 28px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.delete-fab:hover:not(.disabled) {
+  background: #ff6b6b;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.delete-fab.disabled {
+  background: var(--divider-color);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* === CALL NOTIFICATION CARD === */
+.call-notification-card {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.call-notification-card h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.call-notification-card .xame-id {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: -8px 0 0 0;
+}
+
+.call-notification-card #callStatus {
+  font-size: 16px;
+  color: var(--text-secondary);
+  margin: 8px 0;
+}
+
+/* === USER INFO STYLES === */
+.user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-name {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.user-details-form {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.user-details-form label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  display: block;
+}
+
+/* === CALL AUDIO ELEMENTS (ensuring they're accessible) === */
+audio {
+  display: none;
+}
+
+/* === FADEOUT ANIMATION === */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* === UTILITY CLASSES === */
 .will-change-transform {
   will-change: transform;
-  backface-visibility: hidden;
-  transform: translateZ(0);
 }
 
 .smooth-scroll {
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
-  overflow-scrolling: touch;
-}
-
-/* Hardware acceleration for animations */
-.animate-transform {
-  transform: translateZ(0);
-  will-change: transform;
-}
-
-/* Improve animation performance */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
 }
