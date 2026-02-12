@@ -354,6 +354,16 @@ if ("serviceWorker" in navigator) {
 }
 </script>
 
+<!-- PWA Install Banner -->
+<div id="pwaInstallBanner" style="display:none; position:fixed; bottom:0; left:0; right:0; background:#212c37; padding:16px 20px; z-index:99999; border-top:1px solid #2b3540; align-items:center; gap:16px; box-shadow:0 -4px 20px rgba(0,0,0,0.4);">
+  <img src="/media/icons/icon-72x72.png" width="48" height="48" style="border-radius:12px; flex-shrink:0;">
+  <div style="flex:1;">
+    <div style="font-weight:700; color:#e9edef; font-size:16px;">Install XamePage</div>
+    <div style="font-size:13px; color:#9aa8b2;">Add to your home screen for the best experience</div>
+  </div>
+  <button id="pwaInstallBtn" style="background:#0084ff; color:white; border:none; padding:10px 20px; border-radius:20px; font-weight:600; cursor:pointer; font-size:14px; flex-shrink:0;">Install</button>
+  <button id="pwaInstallDismiss" style="background:transparent; color:#9aa8b2; border:none; font-size:22px; cursor:pointer; padding:4px; flex-shrink:0;">✕</button>
+</div>
 <script src="fix-viewport.js"></script>
 
 </body>
