@@ -805,16 +805,10 @@ app.post('/api/delete-chat-and-contact',
 // SOCKET.IO HANDLERS
 // ============================================================
 
-// Online user tracking with timestamps for heartbeat
-const onlineUsers = new Set();
+// NOTE: onlineUsers, userToSocketMap, socketToUserMap are already declared above
+// Adding timestamp tracking and disconnect timeouts for grace period
 const onlineUserTimestamps = new Map(); // Track last heartbeat timestamp
-const userToSocketMap = new Map();
-const socketToUserMap = new Map();
 const disconnectTimeouts = new Map(); // Store disconnect timeouts for grace period
-
-function findSocketIdByUserId(userId) {
-    return userToSocketMap.get(userId);
-}
 
 function broadcastOnlineUsers() {
     const onlineArray = Array.from(onlineUsers);
@@ -1306,6 +1300,7 @@ io.on('connection', (socket) => {
         }
     });
 });
+
 
 // ============================================================
 // CATCH-ALL ROUTE FOR SPA
