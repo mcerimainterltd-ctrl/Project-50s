@@ -53,13 +53,13 @@ html, body {
 
 /* === APP CONTAINER - WITH FALLBACKS === */
 #app {
-  height: 100vh; /* Fallback for older browsers */
-  height: 100dvh; /* Modern dynamic viewport height */
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   position: relative;
   background: var(--dark-bg);
-  min-height: 100vh; /* Fallback */
-  min-height: 100dvh; /* Modern */
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* === CONTAINERS === */
@@ -149,7 +149,7 @@ html, body {
   color: var(--text-primary);
   font-size: 16px;
   transition: box-shadow 0.3s ease, background 0.3s ease;
-  -webkit-appearance: none; /* Browser compatibility */
+  -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
 }
@@ -212,7 +212,7 @@ html, body {
   padding: 0;
   margin: 0;
   outline: none;
-  -webkit-appearance: textfield; /* Browser compatibility */
+  -webkit-appearance: textfield;
   -moz-appearance: textfield;
   appearance: textfield;
   flex-grow: 1;
@@ -262,7 +262,7 @@ html, body {
   font-size: 16px;
   transition: all 0.3s ease;
   box-shadow: 0 4px 12px var(--shadow-color);
-  -webkit-appearance: none; /* Browser compatibility */
+  -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
 }
@@ -287,6 +287,17 @@ html, body {
 
 .btn.primary {
   background: var(--accent-color);
+}
+
+/* ✅ NEW: Danger button style */
+.btn.danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.btn.danger:hover {
+  background: #ff6b6b;
+  transform: translateY(-2px);
 }
 
 .landing-buttons { 
@@ -325,7 +336,7 @@ html, body {
   padding: 8px; 
   border-radius: 50%; 
   transition: background 0.3s ease, color 0.3s ease; 
-  -webkit-appearance: none; /* Browser compatibility */
+  -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
 }
@@ -368,7 +379,7 @@ html, body {
   background: var(--dark-card);
   color: var(--text-primary);
   font-size: 16px;
-  -webkit-appearance: none; /* Browser compatibility */
+  -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
 }
@@ -381,8 +392,8 @@ html, body {
 #contacts {
   display: flex;
   flex-direction: column;
-  height: 100vh; /* Fallback */
-  height: 100dvh; /* Modern browsers */
+  height: 100vh;
+  height: 100dvh;
   top: 0;
   left: 50%;
   transform: translateX(-50%);
@@ -394,7 +405,7 @@ html, body {
 #contacts .search-bar {
   flex-shrink: 0;
   transform: translateZ(0);
-  -webkit-backface-visibility: hidden; /* Browser compatibility */
+  -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
 
@@ -408,6 +419,51 @@ html, body {
   flex-direction: column;
   min-height: 0;
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ✅ NEW: Empty contact list message styling */
+.empty-contact-list-message {
+  text-align: center;
+  padding: 50px 20px;
+  color: #777;
+  font-size: 16px;
+}
+
+.empty-contact-list-message h3 {
+  margin: 0 0 5px 0;
+  font-weight: 900;
+  color: #007bff;
+  display: inline-block;
+  font-size: 3em;
+}
+
+.empty-contact-list-message span {
+  font-size: 0.8em;
+  color: #999;
+  margin-left: 5px;
+  font-weight: 500;
+}
+
+.empty-contact-list-message p:first-of-type {
+  font-size: 0.8em;
+  color: #bbb;
+  margin: 5px 0 0 0;
+}
+
+.empty-contact-list-message p:last-of-type {
+  font-size: 12px;
+  margin-top: 20px;
+  color: #aaa;
+}
+
+/* ✅ NEW: Contact group header */
+.contact-group-header {
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--divider-color);
 }
 
 .list { 
@@ -441,6 +497,23 @@ html, body {
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
+}
+
+/* ✅ NEW: Profile placeholder styling */
+.profile-placeholder {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #3e5163;
+  color: white;
+  font-size: 20px;
+  font-weight: bold;
+  text-transform: uppercase;
 }
 
 .avatar {
@@ -539,8 +612,8 @@ html, body {
 #chat {
   display: flex;
   flex-direction: column;
-  height: 100vh; /* Fallback */
-  height: 100dvh; /* Modern browsers */
+  height: 100vh;
+  height: 100dvh;
   top: 0;
   left: 50%;
   transform: translateX(-50%);
@@ -565,7 +638,7 @@ html, body {
   height: 110px;
   z-index: 10;
   transform: translateZ(0);
-  -webkit-backface-visibility: hidden; /* Browser compatibility */
+  -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
   will-change: transform;
 }
@@ -623,7 +696,6 @@ html, body {
   display: none;
 }
 
-/* Browser compatibility for scrollbar hiding */
 .chat-bg::-webkit-scrollbar {
   display: none;
 }
@@ -653,6 +725,24 @@ html, body {
   position: relative;
   z-index: 2;
   touch-action: pan-y;
+}
+
+/* ✅ NEW: Load more messages button */
+.load-more-messages-btn {
+  display: block;
+  margin: 10px auto;
+  padding: 8px 16px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.load-more-messages-btn:hover {
+  background: #0056b3;
+  transform: translateY(-1px);
 }
 
 /* === COMPOSER - FULLY VISIBLE AT BOTTOM === */
@@ -713,7 +803,7 @@ html, body {
   outline: none;
   scroll-margin-bottom: 0;
   scroll-padding-bottom: 0;
-  -webkit-appearance: none; /* Browser compatibility */
+  -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
 }
@@ -753,6 +843,46 @@ html, body {
   0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
   70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
   100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+/* ✅ NEW: Voice to text button */
+.voice-text-btn {
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+  background-color: var(--dark-bg);
+  color: var(--text-secondary);
+  border-radius: 50%;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  border: 1px solid var(--divider-color);
+}
+
+.voice-text-btn:hover {
+  background-color: #2c3a47;
+  transform: scale(1.05);
+  color: var(--text-primary);
+}
+
+/* ✅ NEW: Speak button in messages */
+.speak-btn {
+  font-size: 16px !important;
+  padding: 4px !important;
+  margin-right: 4px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  color: inherit;
+  opacity: 0.7;
+  transition: all 0.2s ease;
+}
+
+.speak-btn:hover {
+  opacity: 1;
+  transform: scale(1.1);
 }
 
 .menu {
@@ -819,7 +949,7 @@ html, body {
   place-items: center; 
   z-index: 1000;
   transform: translateZ(0);
-  -webkit-backface-visibility: hidden; /* Browser compatibility */
+  -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
 
@@ -854,6 +984,14 @@ html, body {
 .danger { 
   color: #fff; 
   background: var(--danger); 
+}
+
+/* ✅ NEW: Feedback message styling */
+.feedback-message {
+  margin-top: 12px;
+  font-size: 14px;
+  color: var(--danger);
+  text-align: center;
 }
 
 .profile-container {
@@ -1010,6 +1148,14 @@ html, body {
   font-size: 24px;
 }
 
+/* ✅ NEW: Notification toggles */
+.notif-toggles {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: 8px;
+}
+
 .status-section {
   flex: 1;
   display: flex;
@@ -1074,7 +1220,7 @@ html, body {
   z-index: 20;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   transform: translateZ(0);
-  -webkit-backface-visibility: hidden; /* Browser compatibility */
+  -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
 
@@ -1099,14 +1245,41 @@ html, body {
   padding: 8px 12px;
 }
 
+/* ✅ NEW: Status notification styling */
+.status-notification {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-100px);
+  background: var(--dark-card);
+  color: var(--text-primary);
+  padding: 12px 24px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 10000;
+  opacity: 0;
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+
+.status-notification.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+.status-notification.fade-out {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-20px);
+}
+
 .bubble {
   padding: 10px 14px;
   max-width: 90%;
-  height: 9.0%;
   word-wrap: break-word;
   position: relative;
   font-size: 15px;
-  line-height: 1.0;
+  line-height: 1.4;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   transition: all 0.2s ease-in-out;
   user-select: none;
@@ -1136,6 +1309,7 @@ html, body {
   justify-content: flex-end;
   align-items: center;
   margin-top: 4px;
+  gap: 4px;
 }
 
 .bubble.sent .time-row {
@@ -1499,6 +1673,24 @@ html, body {
   transition: width 0.3s ease;
 }
 
+/* ✅ NEW: Cancel upload button */
+.cancel-upload-btn {
+  background: transparent;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 4px;
+}
+
+.cancel-upload-btn:hover {
+  background: var(--danger);
+  color: white;
+}
+
 .image-preview-overlay {
   position: fixed;
   inset: 0;
@@ -1546,8 +1738,8 @@ html, body {
   top: 0;
   left: 0;
   width: 100%;
-  height: 100vh; /* Fallback */
-  height: 100dvh; /* Modern browsers */
+  height: 100vh;
+  height: 100dvh;
   background-color: var(--dark-bg);
   z-index: 2000;
   display: flex;
@@ -1556,7 +1748,7 @@ html, body {
   align-items: center;
   overflow: hidden;
   transform: translateZ(0);
-  -webkit-backface-visibility: hidden; /* Browser compatibility */
+  -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
 
@@ -1586,6 +1778,11 @@ html, body {
   transform: translate3d(0, 0, 0);
 }
 
+/* ✅ NEW: Dragging cursor */
+#localVideo.dragging {
+  cursor: grabbing;
+}
+
 .video-controls {
   position: fixed;
   bottom: 20px;
@@ -1597,7 +1794,7 @@ html, body {
   background-color: rgba(0, 0, 0, 0.4);
   border-radius: 50px;
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px); /* Browser compatibility */
+  -webkit-backdrop-filter: blur(10px);
   z-index: 1000;
 }
 
@@ -1633,7 +1830,7 @@ html, body {
   color: #fff;
   background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px); /* Browser compatibility */
+  -webkit-backdrop-filter: blur(10px);
   border-radius: 50%;
 }
 
@@ -1652,7 +1849,7 @@ html, body {
   gap: 20px;
   animation: slide-up 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
   transform: translateZ(0);
-  -webkit-backface-visibility: hidden; /* Browser compatibility */
+  -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
 }
 
@@ -1884,6 +2081,12 @@ html, body {
   display: none;
 }
 
+/* ✅ NEW: Unread count text */
+.unread-count-text {
+  font-size: 10px;
+  font-weight: bold;
+}
+
 .bubble.selected {
   border: 2px solid #FFD700 !important;
   background-color: rgba(255, 215, 0, 0.1);
@@ -1944,7 +2147,7 @@ html, body {
   flex-shrink: 0;
   transition: all 0.2s ease;
   border: 1px solid var(--divider-color);
-  -webkit-appearance: none; /* Browser compatibility */
+  -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
 }
@@ -1968,7 +2171,7 @@ html, body {
   transition: background 0.3s ease;
   line-height: 1.4;
   max-height: 100px;
-  -webkit-appearance: none; /* Browser compatibility */
+  -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
 }
@@ -1983,7 +2186,7 @@ html, body {
   color: inherit;
 }
 
-/* === COMPOSER DROPDOWN MENU === */
+/* === COMPOSER DROPDOWN MENU - ✅ FIXED POSITIONING === */
 #more-options-dropdown {
   position: absolute !important;
   top: -220px !important;
@@ -2024,27 +2227,6 @@ html, body {
   background: #2c3a47;
 }
 
-#more-options-dropdown .dropdown-item .icon {
-  font-size: 20px;
-  color: var(--text-secondary);
-}
-
-#more-options-dropdown #attachBtn .icon {
-  color: var(--text-secondary);
-}
-
-#more-options-dropdown #menu-voice-note-btn .icon {
-  color: var(--accent-color);
-}
-
-#more-options-dropdown #menu-voice-to-text-btn .icon {
-  color: #FFD700;
-}
-
-#more-options-dropdown #menu-camera-btn .icon {
-  color: var(--secondary-accent);
-}
-
 /* === CAMERA MODAL - WITH FALLBACKS === */
 .camera-modal {
   position: fixed;
@@ -2056,7 +2238,7 @@ html, body {
   padding: 0;
   margin: 0;
   transform: translateZ(0);
-  -webkit-backface-visibility: hidden; /* Browser compatibility */
+  -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
   animation: cameraFadeIn 0.3s ease-out;
   isolation: isolate !important;
@@ -2088,8 +2270,8 @@ html, body {
 
 .camera-modal.fullscreen {
   width: 100vw !important;
-  height: 100vh !important; /* Fallback */
-  height: 100dvh !important; /* Modern browsers */
+  height: 100vh !important;
+  height: 100dvh !important;
   border-radius: 0 !important;
   position: fixed !important;
   top: 0 !important;
@@ -2196,7 +2378,7 @@ html, body {
   right: 0 !important;
   z-index: 10;
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px); /* Browser compatibility */
+  -webkit-backdrop-filter: blur(10px);
   border-bottom: none !important;
 }
 
@@ -2212,7 +2394,7 @@ html, body {
   right: 0 !important;
   z-index: 10;
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px); /* Browser compatibility */
+  -webkit-backdrop-filter: blur(10px);
   border-top: none !important;
 }
 
@@ -2271,7 +2453,7 @@ html, body {
   right: 0;
   z-index: 10;
   backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px); /* Browser compatibility */
+  -webkit-backdrop-filter: blur(20px);
 }
 
 .camera-header h3 {
@@ -2295,7 +2477,7 @@ html, body {
   border-radius: 20px;
   padding: 4px;
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px); /* Browser compatibility */
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .size-toggle-btn {
@@ -2328,6 +2510,28 @@ html, body {
   font-weight: 500;
 }
 
+/* ✅ NEW: Close camera button */
+.close-camera {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: var(--text-primary);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.close-camera:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(1.1);
+}
+
 .camera-header-btn {
   background: rgba(255, 255, 255, 0.15);
   border: none;
@@ -2343,7 +2547,7 @@ html, body {
   justify-content: center;
   transition: all 0.3s ease;
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px); /* Browser compatibility */
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .camera-header-btn:hover {
@@ -2393,7 +2597,7 @@ html, body {
   right: 0;
   z-index: 10;
   backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px); /* Browser compatibility */
+  -webkit-backdrop-filter: blur(20px);
   border-radius: 0 0 inherit inherit;
 }
 
@@ -2429,7 +2633,8 @@ html, body {
   font-weight: 500;
   min-width: 120px;
   transition: all 0.3s ease;
-  backdrop-filter: transparent(20px);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   position: relative;
   z-index: 11;
 }
@@ -2511,6 +2716,11 @@ html, body {
   align-items: center;
   justify-content: center;
   position: relative;
+}
+
+/* ✅ NEW: Button icon and text styling */
+.camera-btn .btn-icon {
+  font-size: 20px;
 }
 
 .camera-btn .btn-text {
@@ -2612,7 +2822,7 @@ html, body {
   font-size: 14px;
   font-weight: 600;
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px); /* Browser compatibility */
+  -webkit-backdrop-filter: blur(10px);
   display: none;
   align-items: center;
   gap: 8px;
@@ -2788,14 +2998,14 @@ html, body {
 .camera-modal.fullscreen .camera-preview,
 .camera-modal.fullscreen .camera-modal-content {
   width: 100vw !important;
-  height: 100vh !important; /* Fallback */
-  height: 100dvh !important; /* Modern browsers */
+  height: 100vh !important;
+  height: 100dvh !important;
 }
 
 .camera-modal.fullscreen #camera-video {
   width: 100vw !important;
-  height: 100vh !important; /* Fallback */
-  height: 100dvh !important; /* Modern browsers */
+  height: 100vh !important;
+  height: 100dvh !important;
 }
 
 .message {
@@ -3032,3 +3242,693 @@ audio {
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
 }
+
+/* ✅ NEW: Header text styling */
+.header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px}
+
+/* ✅ NEW: Input error state */
+.input-error {
+  box-shadow: 0 0 0 2px var(--danger) !important;
+  border-color: var(--danger) !important;
+}
+
+/* ✅ NEW: Password requirements list styling */
+.password-requirements {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+  text-align: left;
+  width: 100%;
+  max-width: 400px;
+}
+
+.password-requirements p {
+  margin: 5px 0;
+}
+
+.password-requirements ul {
+  margin: 5px 0;
+  padding-left: 20px;
+}
+
+.password-requirements li {
+  margin: 4px 0;
+  line-height: 1.4;
+}
+
+/* ✅ NEW: Subtitle styling for dialogs */
+.dialog .subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+/* ✅ NEW: Avatar container unread badge improvements */
+.avatar-container {
+  position: relative;
+  width: 50px;
+  height: 50px;
+  flex-shrink: 0;
+}
+
+.avatar-container.chat-header {
+  width: 36px;
+  height: 36px;
+}
+
+/* ✅ NEW: Ensure profile placeholder matches avatar container */
+.avatar-container .profile-placeholder {
+  width: 100%;
+  height: 100%;
+  font-size: 18px;
+}
+
+/* ✅ NEW: Improved online dot positioning for chat header */
+.chat-header .online-dot {
+  width: 10px;
+  height: 10px;
+  bottom: -1px;
+  right: -1px;
+}
+
+/* ✅ NEW: Contact row hover improvements */
+.item.fade-in {
+  animation: fade 0.15s ease-out;
+}
+
+/* ✅ NEW: Selection toolbar improvements */
+.selection-toolbar-wrapper .counter {
+  color: var(--text-primary);
+}
+
+/* ✅ NEW: Improved bubble line height fix (was 9.0% - incorrect unit) */
+.bubble {
+  line-height: 1.5;
+  height: auto;
+}
+
+/* ✅ NEW: H-sub in chat header */
+.chat .header .toolbar .icon-btn {
+  font-size: 18px;
+  padding: 6px;
+}
+
+/* ✅ NEW: More options menu wrapper */
+#more-options-menu {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ✅ NEW: Camera button dropdown item icon color */
+#camera-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ✅ NEW: Proper hidden state for more-options-dropdown  */
+#more-options-dropdown.hidden {
+  display: none !important;
+}
+
+/* ✅ NEW: Fix for more-options-dropdown when visible */
+#more-options-dropdown:not(.hidden) {
+  display: flex !important;
+}
+
+/* ✅ NEW: Upload progress cancel button positioning */
+.upload-progress-indicator {
+  position: relative;
+  z-index: 999;
+}
+
+/* ✅ NEW: Improved dialog row spacing */
+.dialog .row {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+/* ✅ NEW: Profile container scrollable on small screens */
+.profile-container {
+  overflow-y: auto;
+  max-height: 100vh;
+  max-height: 100dvh;
+}
+
+/* ✅ NEW: Clear All Chats button spacing */
+#clearAllChatsBtn {
+  margin-top: 12px;
+  width: 100%;
+}
+
+/* ✅ NEW: Save profile button width */
+#saveProfileBtn {
+  width: 100%;
+}
+
+/* ✅ NEW: Crop modal image max height */
+#cropImage {
+  max-width: 100%;
+  max-height: 60vh;
+  display: block;
+  object-fit: contain;
+}
+
+/* ✅ NEW: Crop modal layout fix */
+#cropModal .dialog {
+  max-height: 90vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ✅ NEW: Back button in auth pages */
+.auth-container-header .icon-btn {
+  color: var(--text-primary);
+  font-size: 22px;
+}
+
+/* ✅ NEW: Login/Register form scrollable */
+.auth-content {
+  overflow-y: auto;
+  max-height: 100vh;
+  max-height: 100dvh;
+}
+
+/* ✅ NEW: Status notification z-index above video overlay */
+.status-notification {
+  z-index: 20001;
+}
+
+/* ✅ NEW: Incoming call overlay z-index fix */
+#incomingCallOverlay {
+  z-index: 15000;
+}
+
+/* ✅ NEW: Camera modal above incoming call */
+.camera-modal {
+  z-index: 12000;
+}
+
+/* ✅ NEW: Video call overlay z-index */
+#videoCallOverlay {
+  z-index: 10000;
+}
+
+/* ✅ NEW: Ensure layer (dialogs) appears above everything except notifications */
+#layer {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  pointer-events: none;
+}
+
+#layer > * {
+  pointer-events: auto;
+}
+
+/* ✅ NEW: Ensure search dialog appears properly */
+#searchDialog {
+  z-index: 9500;
+}
+
+/* ✅ NEW: Crop modal z-index fix */
+#cropModal {
+  z-index: 9800;
+}
+
+/* ✅ NEW: Message date separator */
+.messages .h-sub {
+  text-align: center;
+  margin: 8px 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.3);
+  padding: 4px 12px;
+  border-radius: 12px;
+  align-self: center;
+  max-width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ✅ NEW: Improve pending message styling */
+.bubble[data-pending="true"] {
+  opacity: 0.75;
+}
+
+/* ✅ NEW: Improved account avatar in header */
+#avatarBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+/* ✅ NEW: Contact ID display in chat header */
+#contactIdDisplay {
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+/* ✅ NEW: Chat name in header */
+#chatName {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+/* ✅ NEW: Chat sub (online/offline) */
+#chatSub {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ✅ NEW: Typing indicator in header */
+#typing {
+  font-size: 12px;
+  color: var(--accent-color);
+  animation: pulse-text 1.5s infinite;
+}
+
+@keyframes pulse-text {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ✅ NEW: Contacts count display */
+#contactsCount {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ✅ NEW: Add contact button styling */
+#addContactBtn {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+/* ✅ NEW: Logout button */
+#logoutBtn {
+  font-size: 20px;
+}
+
+/* ✅ NEW: More menu button */
+#moreBtn {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+/* ✅ NEW: Xame ID display in profile */
+#xameIdDisplay {
+  font-weight: 700;
+  color: var(--accent-color);
+  font-size: 16px;
+}
+
+/* ✅ NEW: Back button in profile header */
+#profileBackBtn {
+  font-size: 22px;
+}
+
+/* ✅ NEW: Profile header h3 */
+#profileSection .header h3 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+}
+
+/* ✅ NEW: Status section header h3 */
+#statusSection .header h3 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+}
+
+/* ✅ NEW: Improve mic/send button visibility */
+#micBtn,
+#sendBtn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  color: white;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  padding: 0;
+  flex-shrink: 0;
+  border: none;
+}
+
+#micBtn:hover,
+#sendBtn:hover {
+  background: var(--accent-light);
+  transform: scale(1.05);
+}
+
+#micBtn .icon,
+#sendBtn .icon {
+  font-size: 18px;
+}
+
+/* ✅ NEW: More options button */
+#more-options-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--dark-bg);
+  color: var(--text-secondary);
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  padding: 0;
+  flex-shrink: 0;
+  border: 1px solid var(--divider-color);
+  transition: all 0.2s ease;
+}
+
+#more-options-btn:hover {
+  background: #2c3a47;
+  color: var(--text-primary);
+}
+
+/* ✅ NEW: File input hidden properly */
+#fileInput {
+  display: none !important;
+  visibility: hidden !important;
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* ✅ NEW: Voice note control layout */
+#voiceNoteControl {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  padding: 0 8px;
+}
+
+#recordBtn {
+  background: var(--danger) !important;
+  color: white !important;
+}
+
+#stopRecordBtn {
+  background: var(--dark-card) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--divider-color) !important;
+}
+
+#playBtn {
+  background: var(--secondary-accent) !important;
+  color: white !important;
+}
+
+#sendVoiceBtn {
+  background: var(--accent-color) !important;
+  color: white !important;
+}
+
+/* ✅ NEW: Action icon container */
+#action-icon-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ✅ NEW: Improved multi-delete fab positioning */
+#multi-delete-btn {
+  bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+}
+
+/* ✅ NEW: Keyboard visibility fix for input-focused body */
+body.input-focused #chat {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* ✅ NEW: Smooth transitions for screen switching */
+.screen {
+  transition: opacity 0.15s ease;
+}
+
+.screen.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ✅ NEW: Improved focus styles for accessibility */
+.btn:focus-visible,
+.icon-btn:focus-visible,
+.input:focus-visible,
+.dropdown-item:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
+}
+
+/* ✅ NEW: Touch target minimum sizing for mobile */
+@media (max-width: 768px) {
+  .icon-btn {
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn {
+    min-height: 48px;
+  }
+
+  .dropdown-item {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+  }
+
+  #chatName {
+    max-width: 120px;
+    font-size: 15px;
+  }
+
+  #contactIdDisplay {
+    max-width: 110px;
+  }
+
+  .chat .header {
+    height: auto;
+    min-height: 70px;
+    padding: 10px 12px;
+  }
+
+  .bubble {
+    max-width: 85%;
+  }
+
+  .selection-toolbar-wrapper .counter {
+    font-size: 0.95em;
+  }
+
+  #more-options-dropdown {
+    top: -240px !important;
+    min-width: 200px;
+  }
+
+  .notif-toggles {
+    gap: 4px;
+  }
+}
+
+/* ✅ NEW: Very small screen fixes */
+@media (max-width: 380px) {
+  .title {
+    font-size: 28px;
+  }
+
+  .subtitle {
+    font-size: 15px;
+  }
+
+  .chat .header {
+    padding: 8px 10px;
+  }
+
+  #chatName {
+    max-width: 90px;
+    font-size: 14px;
+  }
+
+  .video-controls {
+    gap: 12px;
+    padding: 12px 16px;
+  }
+
+  .video-controls .icon-btn {
+    width: 52px;
+    height: 52px;
+    font-size: 24px;
+  }
+
+  .call-notification-card {
+    padding: 16px;
+  }
+
+  .call-notification-card h2 {
+    font-size: 20px;
+  }
+
+  .decline-btn,
+  .accept-btn {
+    padding: 12px 20px;
+    font-size: 14px;
+  }
+}
+
+/* ✅ NEW: Landscape mode fixes */
+@media (max-height: 500px) and (orientation: landscape) {
+  .auth-content {
+    justify-content: flex-start;
+    padding-top: 16px;
+  }
+
+  .title {
+    font-size: 24px;
+    margin-bottom: 8px;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    margin-bottom: 16px;
+  }
+
+  .form-section {
+    gap: 10px;
+  }
+
+  .input {
+    padding: 10px 16px;
+  }
+
+  .chat .header {
+    min-height: 56px;
+    height: auto;
+  }
+
+  .video-controls {
+    bottom: 10px;
+    padding: 10px 16px;
+    gap: 12px;
+  }
+
+  .video-controls .icon-btn {
+    width: 48px;
+    height: 48px;
+    font-size: 22px;
+  }
+
+  #localVideo {
+    width: 80px;
+    height: 110px;
+    bottom: 80px;
+  }
+
+  .camera-modal.fullscreen .camera-controls {
+    padding: 10px;
+  }
+
+  .camera-primary-controls {
+    gap: 20px;
+  }
+
+  .capture-btn,
+  .record-btn {
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
+  }
+}
+
+/* ✅ NEW: Safe area padding for notched phones */
+@supports (padding: max(0px)) {
+  .composer {
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+
+  #contactList {
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
+
+  .delete-fab {
+    bottom: max(90px, calc(90px + env(safe-area-inset-bottom)));
+  }
+
+  .fab {
+    bottom: max(24px, calc(24px + env(safe-area-inset-bottom)));
+    right: max(24px, calc(24px + env(safe-area-inset-right)));
+  }
+}
+
+/* ✅ NEW: Reduced motion accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ✅ NEW: High contrast mode support */
+@media (prefers-contrast: high) {
+  .bubble.sent {
+    background: #0055cc;
+  }
+
+  .bubble.received {
+    background: #1a2a3a;
+    border: 1px solid var(--text-secondary);
+  }
+
+  .input {
+    border: 1px solid var(--text-secondary);
+  }
+
+  .btn {
+    border: 2px solid white;
+  }
+}
+
+/*
+ * END OF XAMEPAGE v2.1 STYLES
+ */
