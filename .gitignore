@@ -26,3 +26,11 @@ Thumbs.db
 # Temporary files
 *.tmp
 .cache/
+
+# Keep folder structure but ignore uploaded files
+uploads/*
+!uploads/.gitkeep
+
+media/profile_pics/*
+!media/profile_pics/.gitkeep
+!media/profile_pics/default.png
