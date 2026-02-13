@@ -692,23 +692,22 @@ function bootstrapApp() {
   window.CHAT_HISTORY = window.CHAT_HISTORY || {};
   window.RESOURCES = window.RESOURCES || { wavesurfers: new Map() };
 
-  // 3) Initialize audio elements
-  initializeAudioElements();
-
-  // 4) Setup all event listeners
-  setupEventListeners();
-  ensurePlaceholderStyles();
-
-  // 5) Check if user is already logged in
-  const savedUser = storage.get(KEYS.user);
-  if (savedUser && savedUser.xameId) {
-    console.log('✅ Restoring session for:', savedUser.xameId);
-    // handleLoginSuccess sets USER and THEN calls connectSocket
-    handleLoginSuccess(savedUser);
+  // 3) Connect socket (PART 15 owns this)
+  if (typeof connectSocket === 'function') {
+    connectSocket();
   } else {
-    // No saved user - just show landing, do NOT connect socket
-    console.log('👋 No saved session - showing landing page');
-    show(elLanding);
+    console.error('connectSocket not found — PART 15 missing!');
+  }
+
+  // 4) Render UI
+  if (typeof renderAppUI === 'function') {
+    renderAppUI();
+  }
+
+  // 5) Restore last open chat
+  const lastActive = persistentStorage.get('xame:lastActiveChat', null);
+  if (lastActive && typeof openChat === 'function') {
+    openChat(lastActive);
   }
 }
 
@@ -729,29 +728,20 @@ document.addEventListener('deviceready', () => {
 */
 
 function connectSocket() {
-    // ✅ GUARD: Never connect without a logged-in user
-    if (!USER || !USER.xameId) {
-        console.warn('⚠️ connectSocket() called before USER is set - aborting');
-        return;
-    }
-
-    // ✅ GUARD: Don't create duplicate connections
     if (socket && socket.connected) {
-        console.log('✅ Socket already connected for:', USER.xameId);
+        console.log('✅ Socket already connected');
         return;
     }
 
-    // Disconnect any stale socket before creating new one
-    if (socket) {
-        console.log('🔄 Cleaning up stale socket before reconnecting');
-        socket.removeAllListeners();
-        socket.disconnect();
-        socket = null;
+    if (!USER || !USER.xameId) {
+        console.warn('⚠️ Cannot connect socket without user');
+        return;
     }
 
     console.log('🔌 Connecting socket for user:', USER.xameId);
 
     try {
+        // ✅ FIXED: Socket.IO auto-detects origin - no need for serverURL parameter
         socket = io({
             query: { userId: USER.xameId },
             transports: ['websocket', 'polling'],
@@ -855,6 +845,7 @@ function connectSocket() {
             try {
                 showIncomingCallNotification(caller, callType, offer);
                 
+                // Store call data for later acceptance
                 window.__pendingCall__ = {
                     offer,
                     callerId,
@@ -893,56 +884,12 @@ function connectSocket() {
             console.log('📞 Call acknowledged by:', senderId);
         });
 
-        console.log('✅ Socket event handlers registered for:', USER.xameId);
+        console.log('✅ Socket event handlers registered');
 
     } catch (error) {
         console.error('❌ Socket connection error:', error);
         showNotification('Failed to connect to server');
         scheduleReconnect();
-    }
-}
-
-/*
-// PART 2D: ONLINE PRESENCE HEARTBEAT SYSTEM (NEW)
-*/
-
-let heartbeatInterval = null;
-const HEARTBEAT_INTERVAL = 30000; // Every 30 seconds
-
-function startHeartbeat() {
-    stopHeartbeat(); // Clear any existing
-    
-    if (!USER?.xameId) return;
-    
-    console.log('💓 Starting presence heartbeat');
-    
-    heartbeatInterval = setInterval(() => {
-        if (socket && socket.connected && USER?.xameId) {
-            socket.emit('heartbeat', { 
-                userId: USER.xameId,
-                timestamp: Date.now()
-            });
-        } else if (!socket || !socket.connected) {
-            // Try to reconnect if not connected
-            console.log('💔 Heartbeat: socket disconnected, attempting reconnect');
-            connectSocket();
-        }
-    }, HEARTBEAT_INTERVAL);
-    
-    // Also emit immediately
-    if (socket && socket.connected) {
-        socket.emit('heartbeat', { 
-            userId: USER.xameId,
-            timestamp: Date.now()
-        });
-    }
-}
-
-function stopHeartbeat() {
-    if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-        heartbeatInterval = null;
-        console.log('🛑 Stopped presence heartbeat');
     }
 }
 
@@ -1029,7 +976,6 @@ async function handleIncomingCall(offer, callerId) {
         exitVideoCall();
     }
 }
-
 
 /*
 // PART 3: Element References and Helper Functions (PATCHED — NULL-SAFE + CLEANED)
@@ -2495,22 +2441,17 @@ function handleLoginSuccess(user) {
     CONTACTS = ensureSeedContacts();
     DRAFTS = storage.get(KEYS.drafts, {});
     
-    // Explicitly hide all other screens first
-    [elLanding, elRegister, elLogin, elChat, elProfile, elStatus].forEach(s => 
-        s?.classList.add('hidden')
-    );
+    // CRITICAL FIX: Explicitly hide all other screens first
+    [elLanding, elRegister, elLogin, elChat, elProfile, elStatus].forEach(s => s?.classList.add('hidden'));
     
-    // Show contacts
+    // Then show contacts
     show(elContacts);
     
     // Initialize camera functionality after login
     initCameraFunctionality();
     
-    // ✅ CRITICAL ORDER: USER must be set BEFORE connectSocket is called
-    // connectSocket() checks USER.xameId - if null it aborts
     try {
-        connectSocket();       // USER is set above, so this will work
-        startHeartbeat();      // Heartbeat starts after socket connects
+        connectSocket();
     } catch (err) {
         console.error('Failed to connect socket:', err);
         showNotification('Connected but real-time features may be limited.');
@@ -4687,13 +4628,8 @@ if (saveProfileBtn) {
                 }
                 
                 console.log('💾 Profile save complete');
-                
-                // ✅ FIXED: Delayed navigation to let user see success notification
-                setTimeout(() => {
-                    show(elContacts);
-                    debouncedRenderContacts();
-                }, 1500); // Give notification time to show
-                
+                show(elContacts);
+                debouncedRenderContacts();
             } else {
                 console.error('❌ Save failed:', result.message);
                 showNotification("Failed to save profile: " + (result.message || "Unknown error."));
@@ -5399,14 +5335,6 @@ function registerSocketHandlers(socket) {
         console.log('✅ Connected to server!');
         showNotification('Connected to server');
 
-        // ✅ ADD THIS: Immediately broadcast presence
-        if (USER?.xameId) {
-            socket.emit('user-online', { 
-                userId: USER.xameId,
-                timestamp: Date.now()
-            });
-        }
-
         setTimeout(() => {
             if (socket && socket.connected && USER?.xameId) {
                 socket.emit('request_online_users');
@@ -5434,14 +5362,9 @@ function registerSocketHandlers(socket) {
     socket.on('reconnect', (attemptNumber) => {
         console.log(`Reconnected after ${attemptNumber} attempts`);
         showNotification('Reconnected successfully!');
-        
-        // ✅ Re-announce presence on reconnect
         if (USER?.xameId) {
-            socket.emit('user-online', { 
-                userId: USER.xameId,
-                timestamp: Date.now()
-            });
             socket.emit('request_online_users');
+            socket.emit('get_contacts', USER.xameId);
         }
     });
 
@@ -5575,6 +5498,7 @@ function registerSocketHandlers(socket) {
     });
 
 }
+
 
 /*
 // PART 16: Date Validation & Form Handling
@@ -6057,14 +5981,6 @@ function setupEventListeners() {
               try {
                   console.log('🚪 Logging out...');
                   
-                  // ✅ STOP HEARTBEAT FIRST
-                  stopHeartbeat();
-                  
-                  // Notify server user is going offline
-                  if (socket && USER?.xameId) {
-                      socket.emit('user-offline', { userId: USER.xameId });
-                  }
-                  
                   // FIXED: Comprehensive cleanup
                   cleanupWaveSurfers();
                   
@@ -6127,6 +6043,64 @@ function setupEventListeners() {
   
   console.log('✅ Event listeners setup complete');
 }
+
+// FIXED: Simplified boot function with better error handling
+(function boot() {
+  console.log('🚀 Starting boot sequence...');
+  
+  try {
+    // Initialize audio elements FIRST
+    initializeAudioElements();
+    
+    // Initialize dual storage system
+    initializeMemoryFromPersistent();
+    
+    const v = storage.get(KEYS.version);
+    if (v !== APP_VERSION) {
+      storage.set(KEYS.version, APP_VERSION);
+    }
+
+    // Setup DOB input handlers
+    if (dobDayInput && dobMonthInput && dobYearInput && dobHiddenDateInput) {
+        dobDayInput.addEventListener('input', () => {
+            handleDateSegmentInput(dobDayInput, 2, dobMonthInput);
+        });
+
+        dobMonthInput.addEventListener('input', () => {
+            handleDateSegmentInput(dobMonthInput, 2, dobYearInput);
+        });
+        
+        dobYearInput.addEventListener('input', () => {
+            handleDateSegmentInput(dobYearInput, 4, null);
+        });
+
+        updateHiddenDOB();
+    }
+
+    ensurePlaceholderStyles();
+    
+    console.log('🔍 Checking for existing user...');
+    const user = storage.get(KEYS.user);
+    
+    if (user && user.xameId) {
+      console.log('✅ Found existing user:', user.xameId);
+      handleLoginSuccess(user);
+    } else {
+      console.log('ℹ️ No existing user found');
+      show(elLanding);
+    }
+    
+    setupEventListeners();
+    
+    // Log storage stats
+    console.log('📊 Storage stats:', storage.getStats());
+    
+    console.log('✅ Boot sequence complete');
+  } catch (error) {
+    console.error('❌ Boot error:', error);
+    show(elLanding);
+  }
+})();
 
 /*
 // PART 18: Mobile Keyboard Fix - Prevents Header/Composer Jumping
@@ -6216,8 +6190,7 @@ function setupEventListeners() {
 
 document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
-        console.log('📴 Tab hidden - maintaining background presence');
-        // DON'T stop heartbeat - keep user online in background
+        console.log('📴 Tab hidden');
         
         if ('speechSynthesis' in window) {
             speechSynthesis.cancel();
@@ -6234,11 +6207,9 @@ document.addEventListener('visibilitychange', () => {
             }
         });
     } else {
-        console.log('📱 Tab visible - refreshing presence');
+        console.log('📱 Tab visible');
         
-        // Re-announce presence immediately
-        if (socket && socket.connected && USER?.xameId) {
-            socket.emit('user-online', { userId: USER.xameId });
+        if (socket && socket.connected) {
             socket.emit('request_online_users');
         }
         
@@ -6291,20 +6262,23 @@ window.addEventListener('beforeunload', (e) => {
 */
 
 window.addEventListener('online', () => {
-    console.log('🌐 Network restored');
+    console.log('🌐 Network connection restored');
     showNotification('Connection restored');
     
-    if (USER) {
-        connectSocket();
-        startHeartbeat(); // ✅ Restart heartbeat when network returns
+    if (USER && (!socket || !socket.connected)) {
+        try {
+            connectSocket();
+        } catch (error) {
+            console.error('Failed to reconnect:', error);
+        }
     }
 });
 
 window.addEventListener('offline', () => {
-    console.log('📡 Network lost');
+    console.log('📡 Network connection lost');
     showNotification('Connection lost. You are offline.');
-    stopHeartbeat(); // ✅ Stop heartbeat when offline
 });
+
 
 /*
 // PART 22: Debug Helpers
@@ -6347,89 +6321,6 @@ window.__XAME_DEBUG__ = {
         console.log('All resources cleared');
     }
 };
-
-
-/*
-// PART 22B: PWA INSTALL PROMPT HANDLER
-*/
-
-let deferredInstallPrompt = null;
-
-window.addEventListener('beforeinstallprompt', (e) => {
-    console.log('💾 PWA install prompt available');
-    
-    // Prevent Chrome from showing mini-infobar
-    e.preventDefault();
-    
-    // Save the event for later use
-    deferredInstallPrompt = e;
-    
-    // Show your custom install banner
-    showPWAInstallBanner();
-});
-
-function showPWAInstallBanner() {
-    const banner = document.getElementById('pwaInstallBanner');
-    if (!banner) return;
-    
-    // Don't show if already installed
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-        return;
-    }
-    
-    // Don't show if dismissed recently (within 3 days)
-    const dismissed = persistentStorage.get('xame:pwa_dismissed');
-    if (dismissed) {
-        const dismissedTime = new Date(dismissed).getTime();
-        const threeDays = 3 * 24 * 60 * 60 * 1000;
-        if (Date.now() - dismissedTime < threeDays) {
-            return;
-        }
-    }
-    
-    banner.style.display = 'flex';
-}
-
-document.getElementById('pwaInstallBtn')?.addEventListener('click', async () => {
-    if (!deferredInstallPrompt) {
-        showNotification('To install: tap your browser menu → "Add to Home Screen"');
-        return;
-    }
-    
-    // Show the native install prompt
-    deferredInstallPrompt.prompt();
-    
-    const { outcome } = await deferredInstallPrompt.userChoice;
-    console.log(`PWA install outcome: ${outcome}`);
-    
-    if (outcome === 'accepted') {
-        showNotification('XamePage installed successfully!');
-    }
-    
-    // Clear the saved prompt - it can only be used once
-    deferredInstallPrompt = null;
-    
-    const banner = document.getElementById('pwaInstallBanner');
-    if (banner) banner.style.display = 'none';
-});
-
-document.getElementById('pwaInstallDismiss')?.addEventListener('click', () => {
-    const banner = document.getElementById('pwaInstallBanner');
-    if (banner) banner.style.display = 'none';
-    
-    // Remember dismissal
-    persistentStorage.set('xame:pwa_dismissed', new Date().toISOString());
-});
-
-// Check if app was installed
-window.addEventListener('appinstalled', () => {
-    console.log('✅ XamePage was installed');
-    showNotification('XamePage installed! Opening from home screen for best experience.');
-    deferredInstallPrompt = null;
-    
-    const banner = document.getElementById('pwaInstallBanner');
-    if (banner) banner.style.display = 'none';
-});
 
 console.log(`
 ╔════════════════════════════════════════╗
