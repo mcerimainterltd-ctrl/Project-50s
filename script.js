@@ -692,22 +692,23 @@ function bootstrapApp() {
   window.CHAT_HISTORY = window.CHAT_HISTORY || {};
   window.RESOURCES = window.RESOURCES || { wavesurfers: new Map() };
 
-  // 3) Connect socket (PART 15 owns this)
-  if (typeof connectSocket === 'function') {
-    connectSocket();
+  // 3) Initialize audio elements
+  initializeAudioElements();
+
+  // 4) Setup all event listeners
+  setupEventListeners();
+  ensurePlaceholderStyles();
+
+  // 5) Check if user is already logged in
+  const savedUser = storage.get(KEYS.user);
+  if (savedUser && savedUser.xameId) {
+    console.log('✅ Restoring session for:', savedUser.xameId);
+    // handleLoginSuccess sets USER and THEN calls connectSocket
+    handleLoginSuccess(savedUser);
   } else {
-    console.error('connectSocket not found — PART 15 missing!');
-  }
-
-  // 4) Render UI
-  if (typeof renderAppUI === 'function') {
-    renderAppUI();
-  }
-
-  // 5) Restore last open chat
-  const lastActive = persistentStorage.get('xame:lastActiveChat', null);
-  if (lastActive && typeof openChat === 'function') {
-    openChat(lastActive);
+    // No saved user - just show landing, do NOT connect socket
+    console.log('👋 No saved session - showing landing page');
+    show(elLanding);
   }
 }
 
@@ -728,20 +729,29 @@ document.addEventListener('deviceready', () => {
 */
 
 function connectSocket() {
-    if (socket && socket.connected) {
-        console.log('✅ Socket already connected');
+    // ✅ GUARD: Never connect without a logged-in user
+    if (!USER || !USER.xameId) {
+        console.warn('⚠️ connectSocket() called before USER is set - aborting');
         return;
     }
 
-    if (!USER || !USER.xameId) {
-        console.warn('⚠️ Cannot connect socket without user');
+    // ✅ GUARD: Don't create duplicate connections
+    if (socket && socket.connected) {
+        console.log('✅ Socket already connected for:', USER.xameId);
         return;
+    }
+
+    // Disconnect any stale socket before creating new one
+    if (socket) {
+        console.log('🔄 Cleaning up stale socket before reconnecting');
+        socket.removeAllListeners();
+        socket.disconnect();
+        socket = null;
     }
 
     console.log('🔌 Connecting socket for user:', USER.xameId);
 
     try {
-        // ✅ FIXED: Socket.IO auto-detects origin - no need for serverURL parameter
         socket = io({
             query: { userId: USER.xameId },
             transports: ['websocket', 'polling'],
@@ -755,9 +765,6 @@ function connectSocket() {
 
         // Register all socket event handlers
         registerSocketHandlers(socket);
-
-        // ===== ONLINE PRESENCE HEARTBEAT =====
-        startHeartbeat();
 
         // Additional socket lifecycle events
         socket.on('typing', ({ senderId }) => {
@@ -848,7 +855,6 @@ function connectSocket() {
             try {
                 showIncomingCallNotification(caller, callType, offer);
                 
-                // Store call data for later acceptance
                 window.__pendingCall__ = {
                     offer,
                     callerId,
@@ -887,7 +893,7 @@ function connectSocket() {
             console.log('📞 Call acknowledged by:', senderId);
         });
 
-        console.log('✅ Socket event handlers registered');
+        console.log('✅ Socket event handlers registered for:', USER.xameId);
 
     } catch (error) {
         console.error('❌ Socket connection error:', error);
@@ -2489,18 +2495,22 @@ function handleLoginSuccess(user) {
     CONTACTS = ensureSeedContacts();
     DRAFTS = storage.get(KEYS.drafts, {});
     
-    // CRITICAL FIX: Explicitly hide all other screens first
-    [elLanding, elRegister, elLogin, elChat, elProfile, elStatus].forEach(s => s?.classList.add('hidden'));
+    // Explicitly hide all other screens first
+    [elLanding, elRegister, elLogin, elChat, elProfile, elStatus].forEach(s => 
+        s?.classList.add('hidden')
+    );
     
-    // Then show contacts
+    // Show contacts
     show(elContacts);
     
     // Initialize camera functionality after login
     initCameraFunctionality();
     
+    // ✅ CRITICAL ORDER: USER must be set BEFORE connectSocket is called
+    // connectSocket() checks USER.xameId - if null it aborts
     try {
-        connectSocket();
-        startHeartbeat(); // ✅ ADD THIS LINE
+        connectSocket();       // USER is set above, so this will work
+        startHeartbeat();      // Heartbeat starts after socket connects
     } catch (err) {
         console.error('Failed to connect socket:', err);
         showNotification('Connected but real-time features may be limited.');
