@@ -2478,8 +2478,12 @@ function endCall() {
 */
 
 function show(section) {
-  [elLanding, elRegister, elLogin, elContacts, elChat, elProfile, elStatus].forEach(s => s?.classList.add('hidden'));
-  section?.classList.remove('hidden');
+  [elLanding, elRegister, elLogin, elContacts, elChat, elProfile, elStatus]
+    .forEach(s => { if (s && s !== section) s.classList.add('hidden'); });
+  if (section) {
+    section.classList.remove('hidden');
+    section.style.display = ''; // ← ensure no inline display:none blocks it
+  }
 }
 
 function handleLoginSuccess(user) {
@@ -4027,113 +4031,6 @@ async function syncDeletionsWithServer(deletionData) {
     });
 }
 
-/*
-// PART 9: Dialogs, Menus, Profile Management & Core UI Listeners (Updated for composer menu fix)
-*/
-
-addContactBtn?.addEventListener('click', () => {
-  openDialog(renderAddContactDialog());
-});
-
-function renderAddContactDialog() {
-  const wrap = document.createElement('div');
-  wrap.className = 'dialog-backdrop';
-  wrap.innerHTML = `
-    <div class="dialog fade-in">
-      <h3>Add a new contact</h3>
-      <div class="row" style="margin:8px 0 16px;">
-        <input id="newContactId" class="input" placeholder="Enter Xame-ID" maxlength="60" />
-      </div>
-      <div class="row" style="margin-bottom:16px;">
-        <input id="newContactName" class="input" placeholder="Enter a name for them (e.g., Jane Doe)" maxlength="60" />
-      </div>
-      <div class="row">
-        <button class="btn" id="saveContact">Save</button>
-        <button class="btn secondary" id="cancelContact">Cancel</button>
-      </div>
-      <div id="feedbackMessage" class="feedback-message"></div>
-    </div>`;
-
-  const saveBtn = wrap.querySelector('#saveContact');
-  const cancelBtn = wrap.querySelector('#cancelContact');
-  const idInput = wrap.querySelector('#newContactId');
-  const nameInput = wrap.querySelector('#newContactName');
-  const feedbackMessage = wrap.querySelector('#feedbackMessage');
-
-  cancelBtn.addEventListener('click', () => closeDialog());
-
-  saveBtn.addEventListener('click', async () => {
-    const contactId = idInput.value.trim();
-    const customName = nameInput.value.trim();
-
-    if (!contactId) {
-      feedbackMessage.textContent = 'Please enter a Xame-ID.';
-      return;
-    }
-    if (contactId === USER.xameId) {
-      feedbackMessage.textContent = 'You cannot add yourself as a contact.';
-      return;
-    }
-    
-    if (CONTACTS.some(c => c.id === contactId)) {
-      feedbackMessage.textContent = 'This Xame-ID is already in your contacts.';
-      return;
-    }
-
-    try {
-      feedbackMessage.textContent = 'Adding contact...';
-      saveBtn.disabled = true;
-
-      // ✅ FIXED: Use relative URL
-      const response = await fetch('/api/add-contact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: USER.xameId,
-          contactId: contactId,
-          customName: customName
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        const contact = {
-          id: contactId,
-          name: data.contact.name,
-          profilePic: data.contact.profilePic,
-          status: 'Message a friend',
-          createdAt: now(),
-          lastAt: now(),
-          lastInteractionTs: now(),
-          lastInteractionPreview: 'Message a friend',
-          online: data.contact.isOnline || false,
-          isProfilePicHidden: data.contact.isProfilePicHidden || false,
-          unreadCount: 0
-        };
-        
-        CONTACTS.push(contact);
-        storage.set(KEYS.contacts, CONTACTS);
-        closeDialog();
-        renderContacts(searchInput.value);
-        openChat(contactId);
-        
-        alert('Contact added successfully!');
-      } else {
-        feedbackMessage.textContent = data.message || 'Failed to add contact. Try again.';
-      }
-
-    } catch (err) {
-      console.error('Add contact fetch error:', err);
-      feedbackMessage.textContent = 'Network error. Please try again.';
-    } finally {
-      saveBtn.disabled = false;
-    }
-  });
-  
-  return wrap;
-}
-
 // =====================
 // PASSWORD SETUP FOR LEGACY USERS (NEW ADDITION)
 // =====================
@@ -4230,7 +4127,6 @@ function renderPasswordSetupDialog(userData) {
     feedbackEl.style.color = '#007bff';
 
     try {
-      // ✅ FIXED: Use relative URL
       const response = await fetch('/api/set-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -4298,15 +4194,13 @@ moreBtn?.addEventListener('click', (e) => {
   openMenu();
 });
 
-// --- Composer More Options Menu Handler (FIX FOR THREE DOTS) ---
+// --- Composer More Options Menu Handler ---
 const moreOptionsBtn = document.getElementById('more-options-btn');
 const moreOptionsDropdown = document.getElementById('more-options-dropdown');
 
 if (moreOptionsBtn && moreOptionsDropdown) {
     moreOptionsBtn.addEventListener('click', (e) => {
         e.stopPropagation(); 
-        
-        // Toggle the visibility of the options dropdown
         moreOptionsDropdown.classList.toggle('hidden');
         moreOptionsBtn.setAttribute(
             'aria-expanded', 
@@ -4314,16 +4208,13 @@ if (moreOptionsBtn && moreOptionsDropdown) {
         );
     });
 
-    // Close the dropdown if the user clicks anywhere else on the document
     document.addEventListener('click', (e) => {
-        // Check if the click target is outside both the button and the dropdown content
         if (!moreOptionsBtn.contains(e.target) && !moreOptionsDropdown.contains(e.target)) {
             moreOptionsDropdown.classList.add('hidden');
             moreOptionsBtn.setAttribute('aria-expanded', 'false');
         }
     });
 }
-// -------------------------------------------------------------
 
 function openMenu() {
   moreBtn.setAttribute('aria-expanded', 'true');
@@ -4342,9 +4233,7 @@ function openMenu() {
           resetAll();
       }
   });
-  document.addEventListener('click', onAway, {
-    once: true
-  });
+  document.addEventListener('click', onAway, { once: true });
 
   function onAway(ev) {
     if (!moreMenu.contains(ev.target)) closeMenu();
@@ -4364,9 +4253,7 @@ function exportData() {
     drafts: storage.get(KEYS.drafts, {}),
     chats: Object.fromEntries(storage.get(KEYS.contacts, []).map(c => [c.id, storage.get(KEYS.chat(c.id), [])]))
   };
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
-    type: 'application/json'
-  });
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -4465,11 +4352,20 @@ function openAccountMenu() {
     <div class="menu-item" id="accountThemes">Themes</div>
   `;
   accountMenu?.appendChild(panel);
+
+  // ✅ FIX: Wrapped in try/catch so errors surface instead of leaving a blank screen
   panel.querySelector('#accountProfile')?.addEventListener('click', () => {
     closeAccountMenu();
-    show(elProfile);
-    loadProfileData();
+    try {
+        show(elProfile);
+        loadProfileData();
+        console.log('✅ Profile page opened');
+    } catch (err) {
+        console.error('❌ Failed to open profile:', err);
+        showNotification('Failed to open profile. Please try again.');
+    }
   });
+
   panel.querySelector('#accountSettings')?.addEventListener('click', () => {
     closeAccountMenu();
     alert('Settings coming soon');
@@ -4482,9 +4378,7 @@ function openAccountMenu() {
   const onAway = (ev) => {
     if (!accountMenu.contains(ev.target)) closeAccountMenu();
   };
-  setTimeout(() => document.addEventListener('click', onAway, {
-    once: true
-  }));
+  setTimeout(() => document.addEventListener('click', onAway, { once: true }));
 }
 
 function closeAccountMenu() {
@@ -4498,6 +4392,11 @@ function closeAccountMenu() {
 */
 
 function loadProfileData() {
+  if (!USER) {
+      console.error('❌ loadProfileData called with no USER');
+      return;
+  }
+  console.log('📋 Loading profile data for:', USER.xameId);
   if (preferredNameInput) {
       preferredNameInput.value = USER.preferredName || '';
   }

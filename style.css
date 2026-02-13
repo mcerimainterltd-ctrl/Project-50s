@@ -499,6 +499,13 @@ html, body {
   object-fit: cover;
 }
 
+/* Ensure profile section is never invisible when active */
+#profileSection:not(.hidden) {
+  display: flex !important;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
 /* ✅ NEW: Profile placeholder styling */
 .profile-placeholder {
   width: 56px;
