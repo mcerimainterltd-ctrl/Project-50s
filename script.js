@@ -5484,31 +5484,37 @@ function isValidISO(dateString) {
     const regex = /^(\d{4})-(\d{2})-(\d{2})$/;
     const match = dateString.match(regex);
 
-    if (!match) {
-        return false;
-    }
+    if (!match) return false;
 
-    const year = parseInt(match[1], 10);
+    const year  = parseInt(match[1], 10);
     const month = parseInt(match[2], 10);
-    const day = parseInt(match[3], 10);
+    const day   = parseInt(match[3], 10);
 
+    // Step 1: Basic range checks BEFORE building a Date object
+    if (year < 1900) return false;
+    if (year > new Date().getFullYear()) return false;
+    if (month < 1 || month > 12) return false;
+    if (day < 1 || day > 31) return false;
+
+    // Step 2: Build UTC date and verify no overflow (e.g. Feb 30, Apr 31)
     const date = new Date(Date.UTC(year, month - 1, day));
 
     if (
-        date.getUTCFullYear() !== year ||
-        date.getUTCMonth() !== month - 1 ||
-        date.getUTCDate() !== day
-    ) {
-        return false;
-    }
+        date.getUTCFullYear() !== year  ||
+        date.getUTCMonth()    !== month - 1 ||
+        date.getUTCDate()     !== day
+    ) return false;
 
-    if (date.getTime() >= Date.now()) { 
-        return false; 
-    }
-    
-    if (year < 1900) {
-        return false;
-    }
+    // Step 3: Must be strictly in the past (not today, not future)
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    if (date.getTime() >= today.getTime()) return false;
+
+    // Step 4: Must be at least 13 years old
+    const minAgeDate = new Date();
+    minAgeDate.setFullYear(minAgeDate.getFullYear() - 13);
+    minAgeDate.setUTCHours(0, 0, 0, 0);
+    if (date.getTime() > minAgeDate.getTime()) return false;
 
     return true;
 }
@@ -5516,34 +5522,135 @@ function isValidISO(dateString) {
 const updateHiddenDOB = () => {
     if (!dobDayInput || !dobMonthInput || !dobYearInput || !dobHiddenDateInput) return;
 
-    const day = dobDayInput.value.padStart(2, '0');
-    const month = dobMonthInput.value.padStart(2, '0');
-    const year = dobYearInput.value;
+    const day   = dobDayInput.value.trim().padStart(2, '0');
+    const month = dobMonthInput.value.trim().padStart(2, '0');
+    const year  = dobYearInput.value.trim();
 
+    // Only build the ISO string when all three fields are fully entered
     if (year.length === 4 && day.length === 2 && month.length === 2) {
         dobHiddenDateInput.value = `${year}-${month}-${day}`;
     } else {
-        dobHiddenDateInput.value = ''; 
+        dobHiddenDateInput.value = '';
     }
 };
 
 const handleDateSegmentInput = (currentInput, maxLength, nextInput) => {
+    // Strip any non-numeric characters
     let value = currentInput.value.replace(/[^0-9]/g, '');
-    
+
+    // Enforce max length
     if (value.length > maxLength) {
-        currentInput.value = value.slice(0, maxLength);
-        value = currentInput.value;
-    } else {
-        currentInput.value = value;
+        value = value.slice(0, maxLength);
     }
 
+    currentInput.value = value;
+
+    // Auto-advance to next field when filled
     if (value.length === maxLength && nextInput) {
         nextInput.focus();
     }
-    
+
     updateHiddenDOB();
 };
 
+// ===== DOB INPUT EVENT LISTENERS =====
+
+if (dobDayInput) {
+    dobDayInput.addEventListener('input', () => {
+        handleDateSegmentInput(dobDayInput, 2, dobMonthInput);
+    });
+
+    dobDayInput.addEventListener('blur', () => {
+        const v = parseInt(dobDayInput.value, 10);
+        if (dobDayInput.value !== '' && (isNaN(v) || v < 1 || v > 31)) {
+            dobDayInput.value = '';
+            dobDayInput.classList.add('input-error');
+            if (dobHiddenDateInput) dobHiddenDateInput.value = '';
+        } else {
+            dobDayInput.classList.remove('input-error');
+        }
+        updateHiddenDOB();
+    });
+
+    dobDayInput.addEventListener('keydown', (e) => {
+        // Allow: backspace, delete, tab, arrows, numbers
+        const allowed = [
+            'Backspace', 'Delete', 'Tab',
+            'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'
+        ];
+        if (!allowed.includes(e.key) && !/^\d$/.test(e.key)) {
+            e.preventDefault();
+        }
+    });
+}
+
+if (dobMonthInput) {
+    dobMonthInput.addEventListener('input', () => {
+        handleDateSegmentInput(dobMonthInput, 2, dobYearInput);
+    });
+
+    dobMonthInput.addEventListener('blur', () => {
+        const v = parseInt(dobMonthInput.value, 10);
+        if (dobMonthInput.value !== '' && (isNaN(v) || v < 1 || v > 12)) {
+            dobMonthInput.value = '';
+            dobMonthInput.classList.add('input-error');
+            if (dobHiddenDateInput) dobHiddenDateInput.value = '';
+        } else {
+            dobMonthInput.classList.remove('input-error');
+        }
+        updateHiddenDOB();
+    });
+
+    dobMonthInput.addEventListener('keydown', (e) => {
+        const allowed = [
+            'Backspace', 'Delete', 'Tab',
+            'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'
+        ];
+        if (!allowed.includes(e.key) && !/^\d$/.test(e.key)) {
+            e.preventDefault();
+        }
+    });
+}
+
+if (dobYearInput) {
+    dobYearInput.addEventListener('input', () => {
+        handleDateSegmentInput(dobYearInput, 4, null);
+    });
+
+    dobYearInput.addEventListener('blur', () => {
+        const v = parseInt(dobYearInput.value, 10);
+        const currentYear = new Date().getFullYear();
+        if (dobYearInput.value !== '' && (isNaN(v) || v < 1900 || v > currentYear)) {
+            dobYearInput.value = '';
+            dobYearInput.classList.add('input-error');
+            if (dobHiddenDateInput) dobHiddenDateInput.value = '';
+        } else {
+            dobYearInput.classList.remove('input-error');
+        }
+        updateHiddenDOB();
+    });
+
+    dobYearInput.addEventListener('keydown', (e) => {
+        const allowed = [
+            'Backspace', 'Delete', 'Tab',
+            'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'
+        ];
+        if (!allowed.includes(e.key) && !/^\d$/.test(e.key)) {
+            e.preventDefault();
+        }
+    });
+}
+
+// ===== CLEAR DOB ERRORS ON INPUT =====
+[dobDayInput, dobMonthInput, dobYearInput].forEach(input => {
+    input?.addEventListener('input', () => {
+        input.classList.remove('input-error');
+        if (dobErrorElement) {
+            dobErrorElement.style.display = 'none';
+            dobErrorElement.textContent = '';
+        }
+    });
+});
 /*
 // PART 17: FIXED Boot & Event Listeners with Password Authentication
 */
