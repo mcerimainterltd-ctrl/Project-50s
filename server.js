@@ -1,21 +1,15 @@
 //
-// XamePage v2.1 Server File - FULLY FIXED VERSION
+// XamePage v2.1 Server File - CLOUDINARY PROFILE PIC FIX
 //
 // Production-grade server with full MongoDB persistence and WebRTC support.
 // Compatible with both cloud deployment (Render) and local development (Termux).
 //
-// ✅ FIXES APPLIED:
-// 1. Added pingTimeout/pingInterval/upgradeTimeout to Socket.IO config
-// 2. Removed fake placeholder socket ID from /api/login
-// 3. Fixed sync-deletions destructuring (was { deletions }, now correct shape)
-// 4. Profile pic filename now includes timestamp to prevent collision
-// 5. get_contacts socket event now authenticates the requesting socket
-// 6. get_chat_history socket event now authenticates the requesting socket
-// 7. Added /api/search-user endpoint
-// 8. createDirectories() is now awaited before server starts listening
-// + Old users without passwords can set passwords via /api/set-password
-// + Profile pictures stored on filesystem (NOT base64 in MongoDB)
-// + Cross-platform path handling
+// ✅ CLOUDINARY FIX APPLIED:
+// - Profile pictures now stored on Cloudinary (persistent cloud storage)
+// - Local disk no longer used for profile pictures
+// - multer switched to memoryStorage for profile pic uploads
+// - Uploaded files go to req.file.buffer → Cloudinary → permanent URL in MongoDB
+// - All other uploads (voice notes, files) still use local disk as before
 //
 
 const express = require('express');
@@ -30,6 +24,7 @@ const { v4: uuidv4 } = require('uuid');
 const cors = require('cors');
 const { body, validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
+const cloudinary = require('cloudinary').v2;
 require('dotenv').config();
 
 // ============================================================
@@ -39,8 +34,6 @@ require('dotenv').config();
 const app = express();
 const server = http.createServer(app);
 
-// ✅ FIX 1: Added pingTimeout, pingInterval, upgradeTimeout to prevent
-//    premature disconnections (was causing blank profile page & socket drops)
 const io = new Server(server, {
     cors: {
         origin: '*',
@@ -50,16 +43,95 @@ const io = new Server(server, {
     transports: ['websocket', 'polling'],
     allowEIO3: true,
     path: '/socket.io/',
-    pingTimeout: 60000,      // ✅ How long to wait for pong before disconnect (ms)
-    pingInterval: 25000,     // ✅ How often to send ping (ms)
-    upgradeTimeout: 30000,   // ✅ How long to wait for transport upgrade (ms)
-    maxHttpBufferSize: 1e8   // ✅ 100MB - needed for large file transfers
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    upgradeTimeout: 30000,
+    maxHttpBufferSize: 1e8
 });
 
-// Middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(cors());
+
+// ============================================================
+// CLOUDINARY CONFIGURATION
+// ============================================================
+
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key:    process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+// Verify Cloudinary config on boot
+if (!process.env.CLOUDINARY_CLOUD_NAME || 
+    !process.env.CLOUDINARY_API_KEY || 
+    !process.env.CLOUDINARY_API_SECRET) {
+    console.warn('⚠️  Cloudinary env vars missing — profile pic uploads will fail');
+    console.warn('    Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET');
+} else {
+    console.log('✅ Cloudinary configured for cloud:', process.env.CLOUDINARY_CLOUD_NAME);
+}
+
+// ============================================================
+// CLOUDINARY UPLOAD HELPER
+// ============================================================
+
+/**
+ * Upload a buffer to Cloudinary.
+ * Returns the permanent secure_url string.
+ * Automatically:
+ *   - Crops to 256x256 face-aware square
+ *   - Stores in xamepage/profile_pics folder
+ *   - Overwrites previous pic for same userId (no orphaned files)
+ */
+function uploadToCloudinary(buffer, userId) {
+    return new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+            {
+                folder: 'xamepage/profile_pics',
+                public_id: `user_${userId}`,   // ← same ID = overwrites old pic
+                overwrite: true,
+                transformation: [
+                    {
+                        width: 256,
+                        height: 256,
+                        crop: 'fill',
+                        gravity: 'face'   // ← smart face-centering
+                    }
+                ],
+                format: 'jpg'
+            },
+            (error, result) => {
+                if (error) {
+                    console.error('❌ Cloudinary upload error:', error);
+                    reject(error);
+                } else {
+                    console.log('✅ Cloudinary upload success:', result.secure_url);
+                    resolve(result.secure_url);  // ← permanent HTTPS URL
+                }
+            }
+        );
+
+        uploadStream.end(buffer);
+    });
+}
+
+/**
+ * Delete a user's profile pic from Cloudinary.
+ * Called when user removes their profile picture.
+ */
+async function deleteFromCloudinary(userId) {
+    try {
+        const publicId = `xamepage/profile_pics/user_${userId}`;
+        const result = await cloudinary.uploader.destroy(publicId);
+        console.log(`✅ Cloudinary delete result for ${userId}:`, result);
+        return result;
+    } catch (error) {
+        console.error('❌ Cloudinary delete error:', error);
+        // Non-fatal — continue even if delete fails
+    }
+}
 
 // ============================================================
 // CROSS-PLATFORM PATH CONFIGURATION
@@ -67,11 +139,12 @@ app.use(cors());
 
 const BASE_DIR = process.cwd();
 const uploadDir = path.join(BASE_DIR, 'uploads');
+// profilePicsDir no longer needed for profile pics (Cloudinary handles it)
+// but kept for any future local use
 const profilePicsDir = path.join(BASE_DIR, 'media', 'profile_pics');
 
 console.log(`📁 Base directory: ${BASE_DIR}`);
 console.log(`📂 Upload directory: ${uploadDir}`);
-console.log(`🖼️  Profile pics directory: ${profilePicsDir}`);
 
 // ============================================================
 // MONGODB CONFIGURATION
@@ -81,7 +154,6 @@ const MONGODB_URI = process.env.MONGODB_CLOUD_URI;
 
 if (!MONGODB_URI) {
     console.error('❌ MONGODB_CLOUD_URI not found in environment variables');
-    console.error('Please create a .env file with MONGODB_CLOUD_URI=your_connection_string');
     process.exit(1);
 }
 
@@ -105,40 +177,44 @@ const contactSchema = new mongoose.Schema({
 });
 
 const userSchema = new mongoose.Schema({
-    xameId: { type: String, required: true, unique: true },
-    firstName: { type: String, required: true },
-    lastName: { type: String, required: true },
-    preferredName: { type: String, default: '' },
-    dob: { type: String, required: true },
-    password: { type: String },           // Optional for backwards compatibility
-    profilePic: { type: String, default: '' }, // Relative path, NOT base64
-    hidePreferredName: { type: Boolean, default: false },
+    xameId:           { type: String, required: true, unique: true },
+    firstName:        { type: String, required: true },
+    lastName:         { type: String, required: true },
+    preferredName:    { type: String, default: '' },
+    dob:              { type: String, required: true },
+    password:         { type: String },
+    profilePic:       { type: String, default: '' }, // Now stores Cloudinary HTTPS URL
+    hidePreferredName:  { type: Boolean, default: false },
     hideProfilePicture: { type: Boolean, default: false },
-    contacts: [contactSchema],
-    createdAt: { type: Date, default: Date.now }
+    contacts:         [contactSchema],
+    createdAt:        { type: Date, default: Date.now }
 });
 
 const messageSchema = new mongoose.Schema({
-    messageId: { type: String, required: true, unique: true },
-    senderId: { type: String, required: true, index: true },
+    messageId:   { type: String, required: true, unique: true },
+    senderId:    { type: String, required: true, index: true },
     recipientId: { type: String, required: true, index: true },
-    ts: { type: Number, required: true },
-    text: { type: String },
+    ts:          { type: Number, required: true },
+    text:        { type: String },
     file: {
-        url: { type: String },
+        url:  { type: String },
         name: { type: String },
         type: { type: String }
     },
-    status: { type: String, enum: ['sent', 'delivered', 'seen'], default: 'sent' }
+    status: { 
+        type: String, 
+        enum: ['sent', 'delivered', 'seen'], 
+        default: 'sent' 
+    }
 });
 
 const callHistorySchema = new mongoose.Schema({
-    callId: { type: String, required: true, unique: true },
-    callerId: { type: String, required: true, index: true },
+    callId:      { type: String, required: true, unique: true },
+    callerId:    { type: String, required: true, index: true },
     recipientId: { type: String, required: true, index: true },
-    callType: { type: String, required: true, enum: ['voice', 'video'] },
-    startTime: { type: Date, default: Date.now },
-    endTime: { type: Date },
+    callType:    { type: String, required: true, enum: ['voice', 'video'] },
+    startTime:   { type: Date, default: Date.now },
+    endTime:     { type: Date },
     status: {
         type: String,
         required: true,
@@ -146,17 +222,19 @@ const callHistorySchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
-const User = mongoose.model('User', userSchema);
-const Message = mongoose.model('Message', messageSchema);
+const User        = mongoose.model('User', userSchema);
+const Message     = mongoose.model('Message', messageSchema);
 const CallHistory = mongoose.model('CallHistory', callHistorySchema);
 
 // ============================================================
 // FILE UPLOAD CONFIGURATION
 // ============================================================
 
-const upload = multer({ dest: uploadDir });
+// ✅ CHANGED: Profile pics use memoryStorage (buffer → Cloudinary)
+//            Regular file uploads still use disk storage
+const diskUpload   = multer({ dest: uploadDir });
+const memoryUpload = multer({ storage: multer.memoryStorage() });
 
-// ✅ FIX 8: createDirectories is now awaited before server starts listening
 async function createDirectories() {
     try {
         if (!fs.existsSync(uploadDir)) {
@@ -165,7 +243,7 @@ async function createDirectories() {
         }
         if (!fs.existsSync(profilePicsDir)) {
             await fsPromises.mkdir(profilePicsDir, { recursive: true });
-            console.log('✅ Created profile pics directory');
+            console.log('✅ Created profile pics directory (local fallback)');
         }
     } catch (error) {
         console.error('❌ Error creating directories:', error);
@@ -175,18 +253,20 @@ async function createDirectories() {
 
 // Serve static files
 app.use(express.static(BASE_DIR));
-app.use('/media/profile_pics', express.static(profilePicsDir));
 app.use('/uploads', express.static(uploadDir));
+// /media/profile_pics no longer needed for new uploads
+// kept for backwards compatibility with any old local URLs still in DB
+app.use('/media/profile_pics', express.static(profilePicsDir));
 
 // ============================================================
 // ONLINE USER STATE MANAGEMENT
 // ============================================================
 
-const onlineUsers = new Set();
-const userToSocketMap = new Map();
-const socketToUserMap = new Map();
+const onlineUsers          = new Set();
+const userToSocketMap      = new Map();
+const socketToUserMap      = new Map();
 const onlineUserTimestamps = new Map();
-const disconnectTimeouts = new Map();
+const disconnectTimeouts   = new Map();
 
 function findSocketIdByUserId(userId) {
     return userToSocketMap.get(userId);
@@ -213,16 +293,16 @@ async function generateUniqueXameId() {
 
 function getPrivacyFilteredContactData(user) {
     return {
-        xameId: user.xameId,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        preferredName: user.hidePreferredName ? '' : user.preferredName,
-        profilePic: user.hideProfilePicture ? '' : user.profilePic
+        xameId:        user.xameId,
+        firstName:     user.firstName,
+        lastName:      user.lastName,
+        preferredName: user.hidePreferredName  ? '' : user.preferredName,
+        profilePic:    user.hideProfilePicture ? '' : user.profilePic
     };
 }
 
 function getContactDisplayName(contactXameId, partnerUser, savedContact) {
-    if (savedContact?.customName) return savedContact.customName;
+    if (savedContact?.customName)   return savedContact.customName;
     if (partnerUser?.preferredName) return partnerUser.preferredName;
     if (partnerUser) {
         const fullName = `${partnerUser.firstName} ${partnerUser.lastName}`.trim();
@@ -249,11 +329,11 @@ async function getLastInteractionDetails(userId, partnerId) {
         }).sort({ createdAt: -1 }).select('createdAt status callerId')
     ]);
 
-    let lastTs = 0;
+    let lastTs      = 0;
     let previewText = 'Start a new chat.';
 
     if (lastMessage) {
-        lastTs = lastMessage.ts;
+        lastTs      = lastMessage.ts;
         previewText = lastMessage.senderId === userId
             ? 'You: Sent a message.'
             : 'New message received.';
@@ -280,10 +360,10 @@ async function getFullContactData(userId) {
     const user = await User.findOne({ xameId: userId }).populate('contacts.contactId');
     if (!user) return [];
 
-    const chatPartners = await Message.distinct('senderId', { recipientId: userId });
+    const chatPartners      = await Message.distinct('senderId',    { recipientId: userId });
     const messageRecipients = await Message.distinct('recipientId', { senderId: userId });
-    const callPartners = await CallHistory.distinct('callerId', { recipientId: userId });
-    const callRecipients = await CallHistory.distinct('recipientId', { callerId: userId });
+    const callPartners      = await CallHistory.distinct('callerId',    { recipientId: userId });
+    const callRecipients    = await CallHistory.distinct('recipientId', { callerId: userId });
 
     const allPartnerIds = new Set([
         ...chatPartners,
@@ -295,40 +375,42 @@ async function getFullContactData(userId) {
     allPartnerIds.delete(userId);
 
     const contactXameIds = Array.from(allPartnerIds);
-    const partnerUsers = await User.find({ xameId: { $in: contactXameIds } });
-    const contactsMap = new Map();
+    const partnerUsers   = await User.find({ xameId: { $in: contactXameIds } });
+    const contactsMap    = new Map();
     partnerUsers.forEach(p => contactsMap.set(p.xameId, p));
 
     const interactionPromises = contactXameIds.map(async (xameId) => {
-        const partnerUser = contactsMap.get(xameId);
+        const partnerUser  = contactsMap.get(xameId);
         const savedContact = user.contacts.find(c => c.contactId?.xameId === xameId);
 
         const [unreadMessagesCount, missedCallsCount, interactionDetails] = await Promise.all([
             Message.countDocuments({
-                senderId: xameId,
+                senderId:    xameId,
                 recipientId: userId,
-                status: { $in: ['sent', 'delivered'] }
+                status:      { $in: ['sent', 'delivered'] }
             }),
             CallHistory.countDocuments({
-                callerId: xameId,
+                callerId:    xameId,
                 recipientId: userId,
-                status: { $in: ['pending', 'missed'] }
+                status:      { $in: ['pending', 'missed'] }
             }),
             getLastInteractionDetails(userId, xameId)
         ]);
 
-        const filteredPartner = partnerUser ? getPrivacyFilteredContactData(partnerUser) : null;
+        const filteredPartner = partnerUser
+            ? getPrivacyFilteredContactData(partnerUser)
+            : null;
         const displayName = getContactDisplayName(xameId, filteredPartner, savedContact);
 
         return {
             xameId,
-            name: displayName,
-            profilePic: filteredPartner ? filteredPartner.profilePic : '',
-            isOnline: onlineUsers.has(xameId),
+            name:                   displayName,
+            profilePic:             filteredPartner ? filteredPartner.profilePic : '',
+            isOnline:               onlineUsers.has(xameId),
             unreadMessagesCount,
             missedCallsCount,
-            isSaved: !!savedContact,
-            lastInteractionTs: interactionDetails.lastInteractionTs,
+            isSaved:                !!savedContact,
+            lastInteractionTs:      interactionDetails.lastInteractionTs,
             lastInteractionPreview: interactionDetails.lastInteractionPreview
         };
     });
@@ -358,8 +440,11 @@ app.post('/api/register',
 
         try {
             const hashedPassword = await bcrypt.hash(password, 10);
-            const xameId = await generateUniqueXameId();
-            const newUser = new User({ xameId, firstName, lastName, dob, password: hashedPassword });
+            const xameId         = await generateUniqueXameId();
+            const newUser        = new User({ 
+                xameId, firstName, lastName, dob, 
+                password: hashedPassword 
+            });
             await newUser.save();
 
             console.log(`✅ User registered: ${newUser.xameId}`);
@@ -370,7 +455,10 @@ app.post('/api/register',
             res.json({ success: true, user: userResponse });
         } catch (error) {
             console.error('Registration error:', error);
-            res.status(500).json({ success: false, message: 'Server error during registration.' });
+            res.status(500).json({ 
+                success: false, 
+                message: 'Server error during registration.' 
+            });
         }
     }
 );
@@ -410,17 +498,19 @@ app.post('/api/set-password',
             res.json({
                 success: true,
                 message: 'Password set successfully! You can now log in.',
-                user: userResponse
+                user:    userResponse
             });
         } catch (error) {
             console.error('Set password error:', error);
-            res.status(500).json({ success: false, message: 'Server error during password setup.' });
+            res.status(500).json({ 
+                success: false, 
+                message: 'Server error during password setup.' 
+            });
         }
     }
 );
 
 // --- LOGIN ---
-// ✅ FIX 2: Removed fake placeholder socket ID that was breaking message routing
 app.post('/api/login', async (req, res) => {
     const { xameId, password } = req.body;
 
@@ -435,22 +525,24 @@ app.post('/api/login', async (req, res) => {
             return res.status(404).json({ success: false, message: 'User not found.' });
         }
 
-        // Legacy user with no password — prompt them to set one
         if (!user.password) {
             return res.status(403).json({
                 success: false,
                 message: 'Your account needs a password. Please set one to continue.',
                 requiresPasswordSetup: true,
                 user: {
-                    xameId: user.xameId,
+                    xameId:    user.xameId,
                     firstName: user.firstName,
-                    lastName: user.lastName
+                    lastName:  user.lastName
                 }
             });
         }
 
         if (!password) {
-            return res.status(400).json({ success: false, message: 'Password is required.' });
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Password is required.' 
+            });
         }
 
         const passwordMatch = await bcrypt.compare(password, user.password);
@@ -458,14 +550,12 @@ app.post('/api/login', async (req, res) => {
             return res.status(401).json({ success: false, message: 'Invalid password.' });
         }
 
-        // ✅ FIX 2: Do NOT set userToSocketMap here with a fake ID.
-        //    The real socket ID is set when the socket connects in io.on('connection').
         console.log(`✅ User logged in: ${user.xameId}`);
 
         const userWithPrivacy = {
             ...user.toObject(),
             privacySettings: {
-                hidePreferredName: user.hidePreferredName,
+                hidePreferredName:  user.hidePreferredName,
                 hideProfilePicture: user.hideProfilePicture
             }
         };
@@ -502,7 +592,11 @@ app.post('/api/get-user-name', async (req, res) => {
         if (user) {
             res.json({
                 success: true,
-                user: { firstName: user.firstName, lastName: user.lastName, xameId: user.xameId }
+                user: { 
+                    firstName: user.firstName, 
+                    lastName:  user.lastName, 
+                    xameId:    user.xameId 
+                }
             });
         } else {
             res.status(404).json({ success: false, message: 'User not found.' });
@@ -513,7 +607,7 @@ app.post('/api/get-user-name', async (req, res) => {
     }
 });
 
-// ✅ FIX 7: Added missing /api/search-user endpoint (client search dialog was broken)
+// --- SEARCH USER ---
 app.post('/api/search-user', async (req, res) => {
     const { xameId } = req.body;
 
@@ -531,12 +625,12 @@ app.post('/api/search-user', async (req, res) => {
         res.json({
             success: true,
             user: {
-                xameId: filtered.xameId,
-                firstName: filtered.firstName,
-                lastName: filtered.lastName,
+                xameId:       filtered.xameId,
+                firstName:    filtered.firstName,
+                lastName:     filtered.lastName,
                 preferredName: filtered.preferredName,
-                profilePic: filtered.profilePic,
-                isOnline: onlineUsers.has(user.xameId)
+                profilePic:   filtered.profilePic,
+                isOnline:     onlineUsers.has(user.xameId)
             }
         });
     } catch (error) {
@@ -545,16 +639,17 @@ app.post('/api/search-user', async (req, res) => {
     }
 });
 
-// --- UPLOAD FILE ---
-app.post('/api/upload-file', upload.single('file'), async (req, res) => {
+// --- UPLOAD FILE (voice notes, documents, media) ---
+// Still uses disk storage — these are ephemeral chat files, not persistent data
+app.post('/api/upload-file', diskUpload.single('file'), async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ success: false, message: 'No file uploaded.' });
     }
 
     try {
-        const fileExt = path.extname(req.file.originalname);
+        const fileExt    = path.extname(req.file.originalname);
         const newFilename = `${uuidv4()}${fileExt}`;
-        const newPath = path.join(uploadDir, newFilename);
+        const newPath    = path.join(uploadDir, newFilename);
 
         await fsPromises.rename(req.file.path, newPath);
 
@@ -566,108 +661,119 @@ app.post('/api/upload-file', upload.single('file'), async (req, res) => {
 });
 
 // --- UPDATE PROFILE ---
-// ✅ FIX 4: Profile pic filename now includes timestamp to prevent collision
-//    when user uploads the same file extension multiple times
-app.post('/api/update-profile', upload.single('profilePic'), async (req, res) => {
-    const { userId, preferredName, removeProfilePic, hidePreferredName, hideProfilePicture } = req.body;
+// ✅ CHANGED: Uses memoryUpload + Cloudinary instead of diskUpload + local filesystem
+app.post('/api/update-profile', 
+    memoryUpload.single('profilePic'),   // ← buffer in memory, not disk
+    async (req, res) => {
+        const { 
+            userId, 
+            preferredName, 
+            removeProfilePic, 
+            hidePreferredName, 
+            hideProfilePicture 
+        } = req.body;
 
-    try {
-        const user = await User.findOne({ xameId: userId });
-        if (!user) {
-            if (req.file) {
-                await fsPromises.unlink(req.file.path).catch(err =>
-                    console.error('Failed to clean up temp file:', err)
-                );
+        try {
+            const user = await User.findOne({ xameId: userId });
+            if (!user) {
+                return res.status(404).json({ 
+                    success: false, 
+                    message: 'User not found.' 
+                });
             }
-            return res.status(404).json({ success: false, message: 'User not found.' });
-        }
 
-        if (preferredName !== undefined) {
-            user.preferredName = preferredName;
-        }
-        if (hidePreferredName !== undefined) {
-            user.hidePreferredName = hidePreferredName === 'true';
-        }
-        if (hideProfilePicture !== undefined) {
-            user.hideProfilePicture = hideProfilePicture === 'true';
-        }
-
-        if (removeProfilePic === 'true') {
-            if (user.profilePic) {
-                const oldPath = path.join(BASE_DIR, user.profilePic);
-                await fsPromises.unlink(oldPath).catch(err =>
-                    console.error('Failed to delete old profile pic:', err)
-                );
+            // Update text fields
+            if (preferredName !== undefined) {
+                user.preferredName = preferredName;
             }
-            user.profilePic = '';
-            console.log(`✅ Profile picture removed for user: ${userId}`);
-
-        } else if (req.file) {
-            // ✅ FIX 4: Use timestamp in filename to avoid collision on same extension
-            const fileExt = path.extname(req.file.originalname);
-            const newFilename = `${userId}_${Date.now()}${fileExt}`;
-            const newPath = path.join(profilePicsDir, newFilename);
-            const oldProfilePic = user.profilePic ? path.join(BASE_DIR, user.profilePic) : null;
-
-            await fsPromises.rename(req.file.path, newPath);
-            user.profilePic = `/media/profile_pics/${newFilename}`;
-
-            if (oldProfilePic) {
-                await fsPromises.unlink(oldProfilePic).catch(err =>
-                    console.error('Failed to delete old profile pic:', err)
-                );
+            if (hidePreferredName !== undefined) {
+                user.hidePreferredName = hidePreferredName === 'true';
             }
-            console.log(`✅ Profile picture updated for user: ${userId}`);
+            if (hideProfilePicture !== undefined) {
+                user.hideProfilePicture = hideProfilePicture === 'true';
+            }
+
+            if (removeProfilePic === 'true') {
+                // ✅ Delete from Cloudinary, clear URL in MongoDB
+                await deleteFromCloudinary(userId);
+                user.profilePic = '';
+                console.log(`✅ Profile picture removed for user: ${userId}`);
+
+            } else if (req.file && req.file.buffer) {
+                // ✅ Upload buffer directly to Cloudinary
+                console.log(`📤 Uploading profile pic to Cloudinary for user: ${userId}`);
+                
+                const cloudinaryUrl = await uploadToCloudinary(
+                    req.file.buffer, 
+                    userId
+                );
+                
+                // Store the permanent Cloudinary URL in MongoDB
+                user.profilePic = cloudinaryUrl;
+                console.log(`✅ Profile picture saved to Cloudinary: ${cloudinaryUrl}`);
+            }
+
+            await user.save();
+
+            res.json({
+                success:            true,
+                preferredName:      user.preferredName,
+                profilePicUrl:      user.profilePic,      // ← permanent Cloudinary URL
+                hidePreferredName:  user.hidePreferredName,
+                hideProfilePicture: user.hideProfilePicture
+            });
+
+        } catch (error) {
+            console.error('Profile update error:', error);
+            res.status(500).json({ 
+                success: false, 
+                message: 'Server error during profile update: ' + error.message 
+            });
         }
-
-        await user.save();
-
-        res.json({
-            success: true,
-            preferredName: user.preferredName,
-            profilePicUrl: user.profilePic,
-            hidePreferredName: user.hidePreferredName,
-            hideProfilePicture: user.hideProfilePicture
-        });
-    } catch (error) {
-        console.error('Profile update error:', error);
-        res.status(500).json({ success: false, message: 'Server error during profile update.' });
     }
-});
+);
 
 // --- ADD CONTACT ---
 app.post('/api/add-contact', async (req, res) => {
     const { userId, contactId, customName } = req.body;
 
     try {
-        const user = await User.findOne({ xameId: userId });
+        const user    = await User.findOne({ xameId: userId });
         const contact = await User.findOne({ xameId: contactId });
 
         if (!user || !contact) {
-            return res.status(404).json({ success: false, message: 'User or contact not found.' });
+            return res.status(404).json({ 
+                success: false, 
+                message: 'User or contact not found.' 
+            });
         }
 
         const contactExists = user.contacts.some(
             c => c.contactId && c.contactId.toString() === contact._id.toString()
         );
         if (contactExists) {
-            return res.status(409).json({ success: false, message: 'Contact already exists.' });
+            return res.status(409).json({ 
+                success: false, 
+                message: 'Contact already exists.' 
+            });
         }
 
         user.contacts.push({ contactId: contact._id, customName });
         await user.save();
 
         const filteredContact = getPrivacyFilteredContactData(contact);
-        const displayName = getContactDisplayName(contact.xameId, filteredContact, { customName });
+        const displayName     = getContactDisplayName(
+            contact.xameId, filteredContact, { customName }
+        );
 
         res.json({
-            success: true,
-            message: 'Contact added successfully.',
+            success:  true,
+            message:  'Contact added successfully.',
             contact: {
-                xameId: contact.xameId,
-                name: displayName,
+                xameId:    contact.xameId,
+                name:      displayName,
                 profilePic: filteredContact.profilePic,
-                isOnline: onlineUsers.has(contact.xameId)
+                isOnline:  onlineUsers.has(contact.xameId)
             }
         });
     } catch (error) {
@@ -687,7 +793,7 @@ app.post('/api/update-contact',
             return res.status(400).json({
                 success: false,
                 message: 'Input validation failed.',
-                errors: validationErrors.array()
+                errors:  validationErrors.array()
             });
         }
 
@@ -717,20 +823,23 @@ app.post('/api/update-contact',
                 }
 
                 const contactExists = user.contacts.some(
-                    c => c.contactId && c.contactId.toString() === contactUser._id.toString()
+                    c => c.contactId && 
+                         c.contactId.toString() === contactUser._id.toString()
                 );
 
                 if (!contactExists) {
-                    user.contacts.push({ contactId: contactUser._id, customName: newName });
+                    user.contacts.push({ 
+                        contactId: contactUser._id, 
+                        customName: newName 
+                    });
                 }
 
                 await user.save();
-                console.log(`✅ Contact ${contactId} updated/added with name "${newName}" for user ${userId}.`);
             }
 
             res.json({
-                success: true,
-                message: 'Contact name updated successfully.',
+                success:     true,
+                message:     'Contact name updated successfully.',
                 updatedName: newName
             });
         } catch (error) {
@@ -753,14 +862,17 @@ app.post('/api/delete-chat-and-contact',
             return res.status(400).json({
                 success: false,
                 message: 'Input validation failed.',
-                errors: validationErrors.array()
+                errors:  validationErrors.array()
             });
         }
 
         const { userId, contactId } = req.body;
 
         if (userId === contactId) {
-            return res.status(403).json({ success: false, message: 'Cannot delete the self chat.' });
+            return res.status(403).json({ 
+                success: false, 
+                message: 'Cannot delete the self chat.' 
+            });
         }
 
         try {
@@ -769,13 +881,13 @@ app.post('/api/delete-chat-and-contact',
             await Promise.all([
                 Message.deleteMany({
                     $or: [
-                        { senderId: userId, recipientId: contactId },
+                        { senderId: userId,    recipientId: contactId },
                         { senderId: contactId, recipientId: userId }
                     ]
                 }),
                 CallHistory.deleteMany({
                     $or: [
-                        { callerId: userId, recipientId: contactId },
+                        { callerId: userId,    recipientId: contactId },
                         { callerId: contactId, recipientId: userId }
                     ]
                 })
@@ -789,8 +901,6 @@ app.post('/api/delete-chat-and-contact',
                 );
                 contactDeleted = contactResult.modifiedCount > 0;
             }
-
-            console.log(`✅ Permanent deletion complete: user ${userId}, contact ${contactId}`);
 
             res.json({
                 success: true,
@@ -813,21 +923,18 @@ app.post('/api/delete-chat-and-contact',
 function broadcastOnlineUsers() {
     const onlineArray = Array.from(onlineUsers);
     io.emit('online_users', onlineArray);
-    console.log(`📊 Broadcasting online users: ${onlineArray.length} users online`);
 }
 
 io.on('connection', (socket) => {
     const userId = socket.handshake.query.userId;
-    console.log(`✅ User ${userId} connected. Total active sockets: ${io.engine.clientsCount}`);
+    console.log(`✅ User ${userId} connected. Sockets: ${io.engine.clientsCount}`);
 
     socket.userId = userId;
 
     if (userId) {
-        // Clear any pending disconnect grace period timeout
         if (disconnectTimeouts.has(userId)) {
             clearTimeout(disconnectTimeouts.get(userId));
             disconnectTimeouts.delete(userId);
-            console.log(`🔄 User ${userId} reconnected within grace period`);
         }
 
         socketToUserMap.set(socket.id, userId);
@@ -838,12 +945,9 @@ io.on('connection', (socket) => {
         broadcastOnlineUsers();
     }
 
-    // --- USER ONLINE (explicit presence announcement) ---
     socket.on('user-online', ({ userId: announcedUserId, timestamp }) => {
         const uid = announcedUserId || socket.userId;
         if (!uid) return;
-
-        console.log(`🟢 User ${uid} announced online presence`);
 
         if (disconnectTimeouts.has(uid)) {
             clearTimeout(disconnectTimeouts.get(uid));
@@ -852,15 +956,10 @@ io.on('connection', (socket) => {
 
         onlineUsers.add(uid);
         onlineUserTimestamps.set(uid, timestamp || Date.now());
-
-        if (uid !== socket.userId) {
-            socket.userId = uid;
-        }
-
+        if (uid !== socket.userId) socket.userId = uid;
         broadcastOnlineUsers();
     });
 
-    // --- HEARTBEAT ---
     socket.on('heartbeat', ({ userId: heartbeatUserId, timestamp }) => {
         const uid = heartbeatUserId || socket.userId;
         if (!uid) return;
@@ -868,7 +967,6 @@ io.on('connection', (socket) => {
         onlineUserTimestamps.set(uid, timestamp || Date.now());
 
         if (!onlineUsers.has(uid)) {
-            console.log(`💓 Heartbeat restored user ${uid} to online`);
             onlineUsers.add(uid);
             broadcastOnlineUsers();
         }
@@ -879,12 +977,9 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- USER OFFLINE (explicit logout) ---
     socket.on('user-offline', ({ userId: offlineUserId }) => {
         const uid = offlineUserId || socket.userId;
         if (!uid) return;
-
-        console.log(`🔴 User ${uid} announced offline (logout)`);
 
         if (disconnectTimeouts.has(uid)) {
             clearTimeout(disconnectTimeouts.get(uid));
@@ -896,60 +991,48 @@ io.on('connection', (socket) => {
         broadcastOnlineUsers();
     });
 
-    // --- REQUEST ONLINE USERS ---
     socket.on('request_online_users', () => {
         socket.emit('online_users', Array.from(onlineUsers));
     });
 
-    // --- DISCONNECT with 60-second grace period ---
     socket.on('disconnect', (reason) => {
         const disconnectedUserId = socket.userId || socketToUserMap.get(socket.id);
-
-        console.log(`❌ Socket ${socket.id} disconnected. Reason: ${reason}`);
         socketToUserMap.delete(socket.id);
 
         if (disconnectedUserId) {
-            const hasOtherSockets = Array.from(socketToUserMap.values()).includes(disconnectedUserId);
+            const hasOtherSockets = Array.from(socketToUserMap.values())
+                .includes(disconnectedUserId);
 
             if (!hasOtherSockets) {
-                console.log(`⏱️ Starting 60s grace period for user ${disconnectedUserId}`);
-
                 const timeoutId = setTimeout(() => {
-                    console.log(`🔴 Grace period expired for user ${disconnectedUserId}`);
-
-                    const stillNoSockets = !Array.from(socketToUserMap.values()).includes(disconnectedUserId);
+                    const stillNoSockets = !Array.from(socketToUserMap.values())
+                        .includes(disconnectedUserId);
                     if (stillNoSockets && onlineUsers.has(disconnectedUserId)) {
                         onlineUsers.delete(disconnectedUserId);
                         onlineUserTimestamps.delete(disconnectedUserId);
                         userToSocketMap.delete(disconnectedUserId);
                         broadcastOnlineUsers();
                     }
-
                     disconnectTimeouts.delete(disconnectedUserId);
                 }, 60000);
 
                 disconnectTimeouts.set(disconnectedUserId, timeoutId);
-            } else {
-                console.log(`ℹ️ User ${disconnectedUserId} has other active sockets`);
             }
         }
-
-        console.log(`📊 Total active sockets: ${io.engine.clientsCount}`);
     });
 
-    // --- GET CHAT HISTORY ---
-    // ✅ FIX 6: Authenticated — only the socket's own userId can request history
     socket.on('get_chat_history', async ({ userId: requestedUserId }) => {
         const authenticatedUserId = socketToUserMap.get(socket.id);
-
         if (authenticatedUserId !== requestedUserId) {
-            console.warn(`⚠️ Unauthorized chat history request from socket ${socket.id}`);
             return socket.emit('chat_history', {});
         }
 
         try {
             const messages = await Message.find({
-                $or: [{ senderId: requestedUserId }, { recipientId: requestedUserId }]
+                $or: [
+                    { senderId:    requestedUserId },
+                    { recipientId: requestedUserId }
+                ]
             }).sort('ts');
 
             const chatHistory = {};
@@ -962,55 +1045,48 @@ io.on('connection', (socket) => {
                 if (!chatHistory[contactId]) chatHistory[contactId] = [];
 
                 chatHistory[contactId].push({
-                    id: msg.messageId,
-                    text: msg.text,
-                    file: msg.file,
-                    type: msg.senderId === requestedUserId ? 'sent' : 'received',
-                    ts: msg.ts,
+                    id:     msg.messageId,
+                    text:   msg.text,
+                    file:   msg.file,
+                    type:   msg.senderId === requestedUserId ? 'sent' : 'received',
+                    ts:     msg.ts,
                     status: msg.status
                 });
             });
 
             socket.emit('chat_history', chatHistory);
-            console.log(`✅ Sent chat history for ${requestedUserId}. Conversations: ${Object.keys(chatHistory).length}`);
         } catch (error) {
             console.error('Failed to get chat history:', error);
             socket.emit('chat_history', {});
         }
     });
 
-    // --- GET CONTACTS ---
-    // ✅ FIX 5: Authenticated — only the socket's own userId can request contacts
     socket.on('get_contacts', async (requestedUserId) => {
         const authenticatedUserId = socketToUserMap.get(socket.id);
-
         if (authenticatedUserId !== requestedUserId) {
-            console.warn(`⚠️ Unauthorized contacts request from socket ${socket.id}`);
             return socket.emit('contacts_list', []);
         }
 
         try {
             const formattedContacts = await getFullContactData(requestedUserId);
             socket.emit('contacts_list', formattedContacts);
-            console.log(`✅ Sent contact list for ${requestedUserId}. Threads: ${formattedContacts.length}`);
         } catch (error) {
             console.error('Failed to get contacts list:', error);
             socket.emit('contacts_list', []);
         }
     });
 
-    // --- SEND MESSAGE ---
     socket.on('send-message', async (data, callback) => {
         const { recipientId, message } = data;
-        const senderId = socketToUserMap.get(socket.id);
+        const senderId         = socketToUserMap.get(socket.id);
         const recipientSocketId = findSocketIdByUserId(recipientId);
 
         try {
             const newMessage = new Message({
-                messageId: message.id,
+                messageId:   message.id,
                 senderId,
                 recipientId,
-                ts: message.ts,
+                ts:          message.ts,
                 ...(message.text && { text: message.text }),
                 ...(message.file && { file: message.file })
             });
@@ -1018,14 +1094,15 @@ io.on('connection', (socket) => {
 
             if (recipientSocketId) {
                 io.to(recipientSocketId).emit('receive-message', { senderId, message });
-
-                await Message.findOneAndUpdate({ messageId: message.id }, { status: 'delivered' });
+                await Message.findOneAndUpdate(
+                    { messageId: message.id }, 
+                    { status: 'delivered' }
+                );
                 io.to(socket.id).emit('message-status-update', {
                     recipientId,
                     messageId: message.id,
-                    status: 'delivered'
+                    status:    'delivered'
                 });
-
                 io.to(recipientSocketId).emit('new_message_count', { senderId });
             }
 
@@ -1036,64 +1113,56 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- SYNC DELETIONS ---
-    // ✅ FIX 3: Fixed destructuring — client sends deletionData directly,
-    //    not wrapped in { deletions: ... }
     socket.on('sync-deletions', async (deletionData, callback) => {
         const userId = socketToUserMap.get(socket.id);
         if (!userId) {
             return callback({ success: false, message: 'Authentication failed.' });
         }
 
-        // ✅ FIX 3: Was `const { contactId } = deletions.chat` — now correct
         const { contactId, messageIds, deleteForEveryone } = deletionData.chat;
-        const recipientId = contactId;
 
         if (!messageIds || messageIds.length === 0) {
             return callback({ success: true, message: 'No messages provided.' });
         }
 
         try {
-            console.log(`[SYNC-DEL] User ${userId} deleting ${messageIds.length} messages. For everyone: ${deleteForEveryone}`);
-
             if (deleteForEveryone) {
                 const deleteResult = await Message.deleteMany({
                     messageId: { $in: messageIds },
-                    senderId: userId
+                    senderId:  userId
                 });
 
-                console.log(`[SYNC-DEL] Deleted ${deleteResult.deletedCount} messages permanently.`);
-
                 if (deleteResult.deletedCount > 0) {
-                    const recipientSocketId = findSocketIdByUserId(recipientId);
+                    const recipientSocketId = findSocketIdByUserId(contactId);
                     if (recipientSocketId) {
                         io.to(recipientSocketId).emit('messages-deleted', {
-                            deleterId: userId,
-                            contactId: userId,
+                            deleterId:  userId,
+                            contactId:  userId,
                             messageIds,
                             permanently: true
                         });
                     }
                 }
-            } else {
-                console.log(`[SYNC-DEL] Local deletion only for user ${userId}.`);
             }
 
             callback({ success: true });
         } catch (error) {
-            console.error(`[SYNC-DEL] Error for user ${userId}:`, error);
+            console.error('Deletion error:', error);
             callback({ success: false, message: 'Internal server error during deletion.' });
         }
     });
 
-    // --- MESSAGE SEEN ---
     socket.on('message-seen', async ({ recipientId, messageIds }) => {
-        const senderId = socketToUserMap.get(socket.id);
+        const senderId          = socketToUserMap.get(socket.id);
         const recipientSocketId = findSocketIdByUserId(recipientId);
 
         try {
             await Message.updateMany(
-                { messageId: { $in: messageIds }, recipientId: senderId, senderId: recipientId },
+                { 
+                    messageId:   { $in: messageIds }, 
+                    recipientId: senderId, 
+                    senderId:    recipientId 
+                },
                 { status: 'seen' }
             );
 
@@ -1108,25 +1177,26 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- TYPING INDICATORS ---
     socket.on('typing', ({ recipientId }) => {
         const recipientSocketId = findSocketIdByUserId(recipientId);
         if (recipientSocketId) {
-            io.to(recipientSocketId).emit('typing', { senderId: socketToUserMap.get(socket.id) });
+            io.to(recipientSocketId).emit('typing', { 
+                senderId: socketToUserMap.get(socket.id) 
+            });
         }
     });
 
     socket.on('stop-typing', ({ recipientId }) => {
         const recipientSocketId = findSocketIdByUserId(recipientId);
         if (recipientSocketId) {
-            io.to(recipientSocketId).emit('stop-typing', { senderId: socketToUserMap.get(socket.id) });
+            io.to(recipientSocketId).emit('stop-typing', { 
+                senderId: socketToUserMap.get(socket.id) 
+            });
         }
     });
 
-    // --- WEBRTC: CALL USER ---
     socket.on('call-user', async ({ recipientId, offer, callType }) => {
-        const callerId = socketToUserMap.get(socket.id);
-        console.log(`📞 User ${callerId} is calling ${recipientId}. Type: ${callType}`);
+        const callerId          = socketToUserMap.get(socket.id);
         const recipientSocketId = findSocketIdByUserId(recipientId);
 
         if (recipientSocketId) {
@@ -1137,34 +1207,34 @@ io.on('connection', (socket) => {
                 ]);
 
                 if (!caller || !recipientUser) {
-                    return socket.emit('call-error', { message: 'Caller or recipient not found.' });
+                    return socket.emit('call-error', { 
+                        message: 'Caller or recipient not found.' 
+                    });
                 }
 
                 const callId = uuidv4();
                 await new CallHistory({
-                    callId,
-                    callerId,
-                    recipientId,
-                    callType,
-                    status: 'pending'
+                    callId, callerId, recipientId, callType, status: 'pending'
                 }).save();
 
                 const filteredCaller = getPrivacyFilteredContactData(caller.toObject());
-                const savedContact = recipientUser.contacts.find(
+                const savedContact   = recipientUser.contacts.find(
                     c => c.contactId && c.contactId.xameId === callerId
                 );
-                const incomingCallName = getContactDisplayName(callerId, filteredCaller, savedContact);
+                const incomingCallName = getContactDisplayName(
+                    callerId, filteredCaller, savedContact
+                );
 
                 io.to(recipientSocketId).emit('call-user', {
                     offer,
                     callerId,
                     caller: {
-                        xameId: filteredCaller.xameId,
-                        firstName: filteredCaller.firstName,
-                        lastName: filteredCaller.lastName,
+                        xameId:       filteredCaller.xameId,
+                        firstName:    filteredCaller.firstName,
+                        lastName:     filteredCaller.lastName,
                         preferredName: filteredCaller.preferredName,
-                        profilePic: filteredCaller.profilePic,
-                        displayName: incomingCallName
+                        profilePic:   filteredCaller.profilePic,
+                        displayName:  incomingCallName
                     },
                     callType,
                     callId
@@ -1174,23 +1244,19 @@ io.on('connection', (socket) => {
                 socket.emit('call-error', { message: 'Failed to initiate call.' });
             }
         } else {
-            console.log(`📞 ${recipientId} is offline. Recording as missed.`);
             try {
                 await new CallHistory({
-                    callId: uuidv4(),
-                    callerId,
-                    recipientId,
-                    callType,
-                    status: 'missed'
+                    callId: uuidv4(), callerId, recipientId, callType, status: 'missed'
                 }).save();
-                socket.emit('call-rejected', { senderId: recipientId, reason: 'offline' });
+                socket.emit('call-rejected', { 
+                    senderId: recipientId, reason: 'offline' 
+                });
             } catch (error) {
                 console.error('Failed to record missed call:', error);
             }
         }
     });
 
-    // --- WEBRTC: ANSWER ---
     socket.on('make-answer', ({ recipientId, answer }) => {
         const recipientSocketId = findSocketIdByUserId(recipientId);
         if (recipientSocketId) {
@@ -1201,7 +1267,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- WEBRTC: ICE CANDIDATE ---
     socket.on('ice-candidate', ({ recipientId, candidate }) => {
         const recipientSocketId = findSocketIdByUserId(recipientId);
         if (recipientSocketId) {
@@ -1212,19 +1277,16 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- WEBRTC: STREAM READY ---
     socket.on('stream-ready', ({ recipientId, streamType }) => {
-        const senderId = socketToUserMap.get(socket.id);
+        const senderId          = socketToUserMap.get(socket.id);
         const recipientSocketId = findSocketIdByUserId(recipientId);
         if (recipientSocketId) {
-            console.log(`🎥 User ${senderId} has a ${streamType} stream ready. Notifying ${recipientId}.`);
             io.to(recipientSocketId).emit('stream-ready', { senderId, streamType });
         }
     });
 
-    // --- WEBRTC: CALL ACCEPTED ---
     socket.on('call-accepted', async ({ recipientId, callId }) => {
-        const acceptorId = socketToUserMap.get(socket.id);
+        const acceptorId        = socketToUserMap.get(socket.id);
         const recipientSocketId = findSocketIdByUserId(recipientId);
         if (recipientSocketId) {
             io.to(recipientSocketId).emit('call-accepted', { recipientId: acceptorId });
@@ -1239,24 +1301,27 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- WEBRTC: CALL REJECTED ---
     socket.on('call-rejected', async ({ recipientId, reason, callId }) => {
-        const rejectorId = socketToUserMap.get(socket.id);
-        const callerSocketId = findSocketIdByUserId(recipientId);
+        const rejectorId      = socketToUserMap.get(socket.id);
+        const callerSocketId  = findSocketIdByUserId(recipientId);
 
         try {
             const query = callId
                 ? { callId }
                 : { callerId: recipientId, recipientId: rejectorId, status: 'pending' };
-            const updateResult = await CallHistory.findOneAndUpdate(query, { status: 'rejected' });
+            const updateResult = await CallHistory.findOneAndUpdate(
+                query, { status: 'rejected' }
+            );
 
             if (callerSocketId) {
-                io.to(callerSocketId).emit('call-rejected', { senderId: rejectorId, reason });
+                io.to(callerSocketId).emit('call-rejected', { 
+                    senderId: rejectorId, reason 
+                });
             }
 
             if (updateResult) {
                 socket.emit('call-acknowledged', {
-                    senderId: recipientId,
+                    senderId:           recipientId,
                     acknowledgedCallId: updateResult.callId
                 });
             }
@@ -1265,7 +1330,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- WEBRTC: CALL UNANSWERED ---
     socket.on('call-unanswered', async ({ recipientId, callId }) => {
         const callerId = socketToUserMap.get(socket.id);
         try {
@@ -1273,7 +1337,6 @@ io.on('connection', (socket) => {
                 { callId, callerId, recipientId, status: 'pending' },
                 { status: 'missed' }
             );
-
             const recipientSocketId = findSocketIdByUserId(recipientId);
             if (recipientSocketId) {
                 io.to(recipientSocketId).emit('new_missed_call_count', { senderId: callerId });
@@ -1283,7 +1346,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- WEBRTC: CALL ENDED ---
     socket.on('call-ended', async ({ recipientId }) => {
         const currentUserId = socketToUserMap.get(socket.id);
         try {
@@ -1312,7 +1374,6 @@ app.get('{*splat}', (req, res) => {
 
 // ============================================================
 // START SERVER
-// ✅ FIX 8: Server only starts after directories are confirmed to exist
 // ============================================================
 
 const PORT = process.env.PORT || 8080;
@@ -1320,30 +1381,25 @@ const PORT = process.env.PORT || 8080;
 createDirectories().then(() => {
     server.listen(PORT, () => {
         console.log('='.repeat(60));
-        console.log('✅ XamePage Server v2.1 - FULLY FIXED');
+        console.log('✅ XamePage Server v2.1 - CLOUDINARY EDITION');
         console.log('='.repeat(60));
         console.log(`📡 Port:              ${PORT}`);
         console.log(`🌐 Local:             http://localhost:${PORT}`);
         console.log(`📁 Base dir:          ${BASE_DIR}`);
         console.log(`📂 Uploads:           ${uploadDir}`);
-        console.log(`🖼️  Profile pics:      ${profilePicsDir}`);
+        console.log(`☁️  Profile pics:      Cloudinary (persistent)`);
         console.log(`🗄️  MongoDB:           Connected`);
         console.log(`🔐 Auth:              Password enabled`);
-        console.log(`⏱️  Ping timeout:      60000ms`);
-        console.log(`💓 Ping interval:     25000ms`);
         console.log('='.repeat(60));
-        console.log('Fixes applied:');
-        console.log('  ✅ Socket.IO ping/timeout settings');
-        console.log('  ✅ Removed fake socket ID from login');
-        console.log('  ✅ sync-deletions destructuring fixed');
-        console.log('  ✅ Profile pic filename collision prevention');
-        console.log('  ✅ get_contacts auth guard');
-        console.log('  ✅ get_chat_history auth guard');
-        console.log('  ✅ /api/search-user endpoint added');
-        console.log('  ✅ Directories created before server starts');
+        console.log('Key changes from previous version:');
+        console.log('  ✅ Profile pics → Cloudinary (never disappear)');
+        console.log('  ✅ memoryStorage for profile pic uploads');
+        console.log('  ✅ Cloudinary auto-crops to 256x256 face-aware');
+        console.log('  ✅ Same public_id per user = no orphaned files');
+        console.log('  ✅ Local disk still used for chat file uploads');
         console.log('='.repeat(60));
     });
 }).catch(err => {
-    console.error('❌ Failed to create directories, server not started:', err);
+    console.error('❌ Failed to start server:', err);
     process.exit(1);
 });
