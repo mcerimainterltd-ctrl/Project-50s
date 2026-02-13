@@ -805,33 +805,153 @@ app.post('/api/delete-chat-and-contact',
 // SOCKET.IO HANDLERS
 // ============================================================
 
+// NOTE: onlineUsers, userToSocketMap, socketToUserMap are already declared above
+// Adding timestamp tracking and disconnect timeouts for grace period
+const onlineUserTimestamps = new Map(); // Track last heartbeat timestamp
+const disconnectTimeouts = new Map(); // Store disconnect timeouts for grace period
+
+function broadcastOnlineUsers() {
+    const onlineArray = Array.from(onlineUsers);
+    io.emit('online_users', onlineArray);
+    console.log(`📊 Broadcasting online users: ${onlineArray.length} users online`);
+}
+
 io.on('connection', (socket) => {
     const userId = socket.handshake.query.userId;
-    console.log(`✅ User ${userId} connected. Total active users: ${io.engine.clientsCount}`);
+    console.log(`✅ User ${userId} connected. Total active sockets: ${io.engine.clientsCount}`);
+
+    // Store userId on socket for disconnect handler
+    socket.userId = userId;
 
     if (userId) {
+        // Clear any pending disconnect timeout for this user
+        if (disconnectTimeouts.has(userId)) {
+            clearTimeout(disconnectTimeouts.get(userId));
+            disconnectTimeouts.delete(userId);
+            console.log(`🔄 User ${userId} reconnected within grace period`);
+        }
+
         socketToUserMap.set(socket.id, userId);
         userToSocketMap.set(userId, socket.id);
         onlineUsers.add(userId);
+        onlineUserTimestamps.set(userId, Date.now());
 
-        io.emit('online_users', Array.from(onlineUsers));
+        // Broadcast updated online users list
+        broadcastOnlineUsers();
     }
 
-    socket.on('disconnect', () => {
-        const userId = socketToUserMap.get(socket.id);
-        if (userId) {
-            onlineUsers.delete(userId);
-            userToSocketMap.delete(userId);
-            socketToUserMap.delete(socket.id);
-            io.emit('online_users', Array.from(onlineUsers));
+    // ✅ USER ONLINE EVENT - Explicit presence announcement
+    socket.on('user-online', ({ userId: announcedUserId, timestamp }) => {
+        const uid = announcedUserId || socket.userId;
+        if (!uid) return;
+
+        console.log(`🟢 User ${uid} announced online presence`);
+
+        // Clear any disconnect timeout
+        if (disconnectTimeouts.has(uid)) {
+            clearTimeout(disconnectTimeouts.get(uid));
+            disconnectTimeouts.delete(uid);
         }
-        console.log(`❌ User ${userId} disconnected. Total active users: ${io.engine.clientsCount}`);
+
+        onlineUsers.add(uid);
+        onlineUserTimestamps.set(uid, timestamp || Date.now());
+        
+        // Update socket mapping if needed
+        if (uid !== socket.userId) {
+            socket.userId = uid;
+        }
+        
+        broadcastOnlineUsers();
     });
 
+    // ✅ HEARTBEAT EVENT - Keep user marked as online
+    socket.on('heartbeat', ({ userId: heartbeatUserId, timestamp }) => {
+        const uid = heartbeatUserId || socket.userId;
+        if (!uid) return;
+
+        // Refresh timestamp
+        onlineUserTimestamps.set(uid, timestamp || Date.now());
+        
+        // Ensure user is in online set
+        if (!onlineUsers.has(uid)) {
+            console.log(`💓 Heartbeat restored user ${uid} to online`);
+            onlineUsers.add(uid);
+            broadcastOnlineUsers();
+        }
+
+        // Clear any pending disconnect timeout
+        if (disconnectTimeouts.has(uid)) {
+            clearTimeout(disconnectTimeouts.get(uid));
+            disconnectTimeouts.delete(uid);
+        }
+    });
+
+    // ✅ USER OFFLINE EVENT - Explicit logout/offline
+    socket.on('user-offline', ({ userId: offlineUserId }) => {
+        const uid = offlineUserId || socket.userId;
+        if (!uid) return;
+
+        console.log(`🔴 User ${uid} announced offline (logout)`);
+
+        // Clear any pending disconnect timeout
+        if (disconnectTimeouts.has(uid)) {
+            clearTimeout(disconnectTimeouts.get(uid));
+            disconnectTimeouts.delete(uid);
+        }
+
+        onlineUsers.delete(uid);
+        onlineUserTimestamps.delete(uid);
+        broadcastOnlineUsers();
+    });
+
+    // ✅ REQUEST ONLINE USERS
     socket.on('request_online_users', () => {
         socket.emit('online_users', Array.from(onlineUsers));
     });
 
+    // ✅ DISCONNECT WITH 60 SECOND GRACE PERIOD
+    socket.on('disconnect', (reason) => {
+        const disconnectedUserId = socket.userId || socketToUserMap.get(socket.id);
+        
+        console.log(`❌ Socket ${socket.id} disconnected. Reason: ${reason}`);
+
+        // Clean up socket mappings
+        socketToUserMap.delete(socket.id);
+        
+        if (disconnectedUserId) {
+            // Check if user has other active sockets
+            const hasOtherSockets = Array.from(socketToUserMap.values()).includes(disconnectedUserId);
+            
+            if (!hasOtherSockets) {
+                console.log(`⏱️ Starting 60s grace period for user ${disconnectedUserId}`);
+                
+                // Set grace period timeout
+                const timeoutId = setTimeout(() => {
+                    console.log(`🔴 Grace period expired for user ${disconnectedUserId}`);
+                    
+                    // Double-check they haven't reconnected
+                    const stillNoSockets = !Array.from(socketToUserMap.values()).includes(disconnectedUserId);
+                    
+                    if (stillNoSockets && onlineUsers.has(disconnectedUserId)) {
+                        onlineUsers.delete(disconnectedUserId);
+                        onlineUserTimestamps.delete(disconnectedUserId);
+                        userToSocketMap.delete(disconnectedUserId);
+                        broadcastOnlineUsers();
+                    }
+                    
+                    disconnectTimeouts.delete(disconnectedUserId);
+                }, 60000); // 60 second grace period
+                
+                disconnectTimeouts.set(disconnectedUserId, timeoutId);
+            } else {
+                console.log(`ℹ️ User ${disconnectedUserId} has other active sockets`);
+            }
+        }
+
+        console.log(`📊 Total active sockets: ${io.engine.clientsCount}`);
+    });
+
+    // ===== CHAT HISTORY =====
     socket.on('get_chat_history', async ({ userId }) => {
         try {
             const messages = await Message.find({
@@ -865,10 +985,10 @@ io.on('connection', (socket) => {
         }
     });
 
+    // ===== CONTACTS LIST =====
     socket.on('get_contacts', async (userId) => {
         try {
             const formattedContacts = await getFullContactData(userId);
-
             socket.emit('contacts_list', formattedContacts);
             console.log(`✅ Sent full contact list for ${userId}. Total threads: ${formattedContacts.length}`);
         } catch (error) {
@@ -877,6 +997,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // ===== SEND MESSAGE =====
     socket.on('send-message', async (data, callback) => {
         const { recipientId, message } = data;
         const senderId = socketToUserMap.get(socket.id);
@@ -914,6 +1035,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // ===== SYNC DELETIONS =====
     socket.on('sync-deletions', async ({ deletions }, callback) => {
         const userId = socketToUserMap.get(socket.id);
         if (!userId) {
@@ -951,7 +1073,7 @@ io.on('connection', (socket) => {
                     }
                 }
             } else {
-                console.log(`[SYNC-DEL] Message(s) marked for local deletion only for user ${userId}. (Requires client-side persistence).`);
+                console.log(`[SYNC-DEL] Message(s) marked for local deletion only for user ${userId}.`);
             }
 
             callback({ success: true });
@@ -961,6 +1083,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // ===== MESSAGE SEEN =====
     socket.on('message-seen', async ({ recipientId, messageIds }) => {
         const senderId = socketToUserMap.get(socket.id);
         const recipientSocketId = findSocketIdByUserId(recipientId);
@@ -982,6 +1105,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // ===== TYPING INDICATORS =====
     socket.on('typing', ({ recipientId }) => {
         const recipientSocketId = findSocketIdByUserId(recipientId);
         if (recipientSocketId) {
@@ -996,7 +1120,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // WebRTC Signaling
+    // ===== WEBRTC CALLING =====
     socket.on('call-user', async ({ recipientId, offer, callType }) => {
         const callerId = socketToUserMap.get(socket.id);
         console.log(`📞 User ${callerId} is calling ${recipientId}. Call Type: ${callType}`);
@@ -1022,11 +1146,9 @@ io.on('connection', (socket) => {
                 await newCall.save();
 
                 const filteredCaller = getPrivacyFilteredContactData(caller.toObject());
-
                 const savedContactForCaller = recipientUser.contacts.find(
                     c => c.contactId && c.contactId.xameId === callerId
                 );
-
                 const incomingCallName = getContactDisplayName(callerId, filteredCaller, savedContactForCaller);
 
                 const restrictedCaller = {
@@ -1038,7 +1160,13 @@ io.on('connection', (socket) => {
                     displayName: incomingCallName
                 };
 
-                io.to(recipientSocketId).emit('call-user', { offer, callerId, caller: restrictedCaller, callType, callId: callId });
+                io.to(recipientSocketId).emit('call-user', { 
+                    offer, 
+                    callerId, 
+                    caller: restrictedCaller, 
+                    callType, 
+                    callId: callId 
+                });
             } catch (error) {
                 console.error('Call user error:', error);
                 socket.emit('call-error', { message: 'Failed to initiate call due to server error.' });
@@ -1066,14 +1194,20 @@ io.on('connection', (socket) => {
     socket.on('make-answer', ({ recipientId, answer }) => {
         const recipientSocketId = findSocketIdByUserId(recipientId);
         if (recipientSocketId) {
-            io.to(recipientSocketId).emit('make-answer', { answer, senderId: socketToUserMap.get(socket.id) });
+            io.to(recipientSocketId).emit('make-answer', { 
+                answer, 
+                senderId: socketToUserMap.get(socket.id) 
+            });
         }
     });
 
     socket.on('ice-candidate', ({ recipientId, candidate }) => {
         const recipientSocketId = findSocketIdByUserId(recipientId);
         if (recipientSocketId) {
-            io.to(recipientSocketId).emit('ice-candidate', { candidate, senderId: socketToUserMap.get(socket.id) });
+            io.to(recipientSocketId).emit('ice-candidate', { 
+                candidate, 
+                senderId: socketToUserMap.get(socket.id) 
+            });
         }
     });
 
@@ -1092,7 +1226,11 @@ io.on('connection', (socket) => {
         if (recipientSocketId) {
             io.to(recipientSocketId).emit('call-accepted', { recipientId: acceptorId });
             try {
-                const query = callId ? { callId: callId } : { callerId: recipientId, recipientId: acceptorId, status: 'pending' };
+                const query = callId ? { callId: callId } : { 
+                    callerId: recipientId, 
+                    recipientId: acceptorId, 
+                    status: 'pending' 
+                };
                 await CallHistory.findOneAndUpdate(query, { status: 'accepted' });
             } catch (error) {
                 console.error('Failed to update call history (accepted):', error);
@@ -1105,7 +1243,11 @@ io.on('connection', (socket) => {
         const callerSocketId = findSocketIdByUserId(recipientId);
 
         try {
-            const query = callId ? { callId: callId } : { callerId: recipientId, recipientId: rejectorId, status: 'pending' };
+            const query = callId ? { callId: callId } : { 
+                callerId: recipientId, 
+                recipientId: rejectorId, 
+                status: 'pending' 
+            };
             const updateResult = await CallHistory.findOneAndUpdate(query, { status: 'rejected' });
 
             if (callerSocketId) {
@@ -1113,7 +1255,10 @@ io.on('connection', (socket) => {
             }
 
             if (updateResult) {
-                socket.emit('call-acknowledged', { senderId: recipientId, acknowledgedCallId: updateResult.callId });
+                socket.emit('call-acknowledged', { 
+                    senderId: recipientId, 
+                    acknowledgedCallId: updateResult.callId 
+                });
             }
         } catch (error) {
             console.error('Failed to update call history (rejected):', error);
@@ -1155,6 +1300,7 @@ io.on('connection', (socket) => {
         }
     });
 });
+
 
 // ============================================================
 // CATCH-ALL ROUTE FOR SPA
