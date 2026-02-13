@@ -1092,6 +1092,7 @@ const avatarInitialsEl = document.getElementById('avatarInitials');
 const clearAllChatsBtn = $('#clearAllChatsBtn');
 const avatarBtn = document.getElementById('avatarBtn');
 const accountMenu = document.getElementById('accountMenu');
+document.getElementById('profileSection').classList.add('active');
 
 // Chat header
 const elChatHeader = $('#chat .header');
