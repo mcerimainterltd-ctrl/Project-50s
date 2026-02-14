@@ -1119,6 +1119,10 @@ io.on('connection', (socket) => {
             return callback({ success: false, message: 'Authentication failed.' });
         }
 
+        if (!deletionData?.chat) {
+            return callback({ success: false, message: 'Invalid deletion payload.' });
+        }
+
         const { contactId, messageIds, deleteForEveryone } = deletionData.chat;
 
         if (!messageIds || messageIds.length === 0) {
@@ -1368,7 +1372,7 @@ io.on('connection', (socket) => {
 // CATCH-ALL ROUTE FOR SPA
 // ============================================================
 
-app.get('{*splat}', (req, res) => {
+app.get('*', (req, res) => {
     res.sendFile(path.join(BASE_DIR, 'index.html'));
 });
 
