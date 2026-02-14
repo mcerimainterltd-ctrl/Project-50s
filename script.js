@@ -675,6 +675,55 @@ function scheduleReconnect() {
   }, delay);
 }
 
+// ===== PUSH NOTIFICATION SUBSCRIPTION =====
+async function subscribeToPushNotifications() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        console.warn('Push notifications not supported');
+        return;
+    }
+
+    try {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+            console.warn('Push notification permission denied');
+            return;
+        }
+
+        const registration = await navigator.serviceWorker.ready;
+
+        let subscription = await registration.pushManager.getSubscription();
+
+        if (!subscription) {
+            subscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(
+                    'BKRD94hqX829Dy5EobzJRdUJRMMGJp_Irma-KBPOAtgn6CvK-FvSVnjRuAlelMfqBrKVsd47HvpciMr_ZpBenL8'
+                )
+            });
+        }
+
+        await fetch('/api/save-push-subscription', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: USER.xameId,
+                subscription
+            })
+        });
+
+        console.log('✅ Push subscription saved');
+    } catch (error) {
+        console.error('Push subscription error:', error);
+    }
+}
+
+// ===== VAPID KEY HELPER =====
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    return new Uint8Array([...rawData].map(c => c.charCodeAt(0)));
+}
 
 // =====================
 // 🚀 APP BOOTSTRAP
@@ -2516,6 +2565,7 @@ function handleLoginSuccess(user) {
     try {
         connectSocket();       // USER is set above, so this will work
         startHeartbeat();      // Heartbeat starts after socket connects
+        subscribeToPushNotifications();
     } catch (err) {
         console.error('Failed to connect socket:', err);
         showNotification('Connected but real-time features may be limited.');
