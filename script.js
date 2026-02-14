@@ -5651,6 +5651,8 @@ if (dobYearInput) {
         }
     });
 });
+
+
 /*
 // PART 17: FIXED Boot & Event Listeners with Password Authentication
 */
@@ -5672,19 +5674,15 @@ function validatePassword(password) {
     if (password.length < 8) {
         errors.push('Password must be at least 8 characters long');
     }
-    
     if (!/[A-Z]/.test(password)) {
         errors.push('Password must contain at least one uppercase letter');
     }
-    
     if (!/[a-z]/.test(password)) {
         errors.push('Password must contain at least one lowercase letter');
     }
-    
     if (!/[0-9]/.test(password)) {
         errors.push('Password must contain at least one number');
     }
-    
     if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
         errors.push('Password must contain at least one special character');
     }
@@ -5774,6 +5772,93 @@ function setupEventListeners() {
           }
       });
   }
+
+  // ===== ADD CONTACT BUTTON =====
+  if (addContactBtn) {
+      addContactBtn.addEventListener('click', () => {
+          const searchDialog = $('#searchDialog');
+          const searchIdInput = $('#searchIdInput');
+          const searchResults = $('#searchResults');
+          const searchUserBtn = $('#searchUserBtn');
+
+          if (!searchDialog) return;
+
+          // Clear previous state
+          if (searchIdInput) searchIdInput.value = '';
+          if (searchResults) {
+              searchResults.innerHTML = '';
+              searchResults.classList.add('hidden');
+          }
+
+          searchDialog.classList.remove('hidden');
+
+          if (searchUserBtn) {
+              searchUserBtn.onclick = async () => {
+                  const xameId = searchIdInput?.value.trim();
+                  if (!xameId) return showNotification('Please enter a Xame-ID.');
+
+                  try {
+                      const res = await fetch('/api/search-user', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ xameId })
+                      });
+                      const data = await res.json();
+
+                      if (!data.success) {
+                          showNotification(data.message || 'User not found.');
+                          return;
+                      }
+
+                      const u = data.user;
+                      searchResults.innerHTML = '';
+                      searchResults.classList.remove('hidden');
+
+                      const item = document.createElement('div');
+                      item.className = 'item';
+                      item.innerHTML = `
+                          <div class="meta">
+                              <div class="name">${escapeHtml(u.firstName)} ${escapeHtml(u.lastName)}</div>
+                              <div class="status">${escapeHtml(u.xameId)}</div>
+                          </div>
+                          <button class="btn primary" id="confirmAddContactBtn">Add</button>
+                      `;
+
+                      item.querySelector('#confirmAddContactBtn').addEventListener('click', async () => {
+                          const res2 = await fetch('/api/add-contact', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ 
+                                  userId: USER.xameId, 
+                                  contactId: u.xameId 
+                              })
+                          });
+                          const data2 = await res2.json();
+                          if (data2.success) {
+                              searchDialog.classList.add('hidden');
+                              if (socket) socket.emit('get_contacts', USER.xameId);
+                              showNotification('Contact added!');
+                          } else {
+                              showNotification(data2.message || 'Failed to add contact.');
+                          }
+                      });
+
+                      searchResults.appendChild(item);
+                  } catch (err) {
+                      console.error('Search error:', err);
+                      showNotification('Network error during search.');
+                  }
+              };
+          }
+
+          // Close when clicking outside the dialog box
+          searchDialog.addEventListener('click', (e) => {
+              if (e.target === searchDialog) {
+                  searchDialog.classList.add('hidden');
+              }
+          }, { once: true });
+      });
+  }
   
   // ===== FIXED: LOGIN FORM WITH PASSWORD =====
   if (loginForm) {
@@ -5809,7 +5894,6 @@ function setupEventListeners() {
           console.log('🔐 Attempting login for:', xameId);
           
           try {
-              // ✅ FIXED: Use relative URLs
               // STEP 1: Check if user exists
               const checkResponse = await fetch('/api/get-user-name', {
                   method: 'POST',
@@ -5859,24 +5943,17 @@ function setupEventListeners() {
               
               const loginResult = await loginResponse.json();
 
-              // ✅ NEW: Check for password setup requirement
+              // Check for password setup requirement (legacy users)
               if (loginResult.requiresPasswordSetup) {
                   console.log('⚠️ Legacy user detected - needs password setup');
-                  
-                  // Clear password field
                   loginPasswordInput.value = '';
-                  
-                  // Show password setup dialog
                   openDialog(renderPasswordSetupDialog(loginResult.user));
                   return;
               }
 
               if (loginResult.success) {
                   console.log('✅ Login successful');
-                  
-                  // Clear password field
                   loginPasswordInput.value = '';
-                  
                   handleLoginSuccess(loginResult.user);
               } else {
                   showNotification(loginResult.message || 'Invalid password. Please try again.');
@@ -5916,13 +5993,11 @@ function setupEventListeners() {
           const password = passwordInput.value;
           const confirmPassword = confirmPasswordInput.value;
           
-          // Validate names
           if (!firstName || !lastName) {
               showNotification("Please fill out both name fields.");
               return;
           }
 
-          // Validate DOB
           if (dobErrorElement) {
               dobErrorElement.style.display = 'none';
               dobErrorElement.textContent = '';
@@ -5937,17 +6012,15 @@ function setupEventListeners() {
               if (dobErrorElement) {
                   dobErrorElement.textContent = errorMessage;
                   dobErrorElement.style.display = 'block';
-                  dobErrorElement.scrollIntoView({ behavior: 'smooth', block: 'center' }); 
+                  dobErrorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
               } else {
-                  showNotification(errorMessage); 
+                  showNotification(errorMessage);
               }
               
               dobInputs.forEach(input => input?.classList.add('input-error'));
-              
               return;
           }
 
-          // Validate password match
           if (password !== confirmPassword) {
               showNotification('Passwords do not match. Please try again.');
               passwordInput.value = '';
@@ -5956,7 +6029,6 @@ function setupEventListeners() {
               return;
           }
 
-          // Validate password strength
           const passwordValidation = validatePassword(password);
           if (!passwordValidation.valid) {
               showNotification(passwordValidation.errors.join('\n'));
@@ -5968,7 +6040,6 @@ function setupEventListeners() {
               e.submitter.disabled = true;
               console.log('🔐 Attempting registration...');
 
-              // ✅ FIXED: Use relative URL
               const response = await fetch('/api/register', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -5991,13 +6062,12 @@ function setupEventListeners() {
                   
                   console.log('✅ Registration successful:', newUser.xameId);
                   
-                  // Clear password fields
                   passwordInput.value = '';
                   confirmPasswordInput.value = '';
                   
                   alert(`Registration successful! Your Xame-ID is: ${newUser.xameId}\n\nPlease save this ID, you'll need it to log in.`);
                   
-                  storage.set(KEYS.user, newUser); 
+                  storage.set(KEYS.user, newUser);
                   handleLoginSuccess(newUser);
                   
               } else {
@@ -6012,7 +6082,7 @@ function setupEventListeners() {
       });
   }
 
-  // ===== CALL BUTTONS (Voice, Video, Clear Chat) =====
+  // ===== CALL BUTTONS =====
   const voiceCallBtn = document.getElementById('voiceCallBtn');
   const videoCallBtn = document.getElementById('videoCallBtn');
   const clearChatBtn = document.getElementById('clearChatBtn');
@@ -6064,15 +6134,12 @@ function setupEventListeners() {
               try {
                   console.log('🚪 Logging out...');
                   
-                  // ✅ STOP HEARTBEAT FIRST
                   stopHeartbeat();
                   
-                  // Notify server user is going offline
                   if (socket && USER?.xameId) {
                       socket.emit('user-offline', { userId: USER.xameId });
                   }
                   
-                  // FIXED: Comprehensive cleanup
                   cleanupWaveSurfers();
                   
                   if (cropper) {
@@ -6099,7 +6166,6 @@ function setupEventListeners() {
                       socket = null;
                   }
                   
-                  // Clear all memory storage
                   storage.clear();
                   
                   USER = null;
@@ -6122,10 +6188,9 @@ function setupEventListeners() {
   
   // ===== SEARCH =====
   if (searchInput) {
-      // FIXED: Use debounce with leading edge for immediate feedback
       const debouncedSearch = debounce((value) => {
           renderContacts(value);
-      }, 300, true); // Leading edge = true for immediate first render
+      }, 300, true);
       
       searchInput.addEventListener('input', (e) => {
           debouncedSearch(e.target.value);
