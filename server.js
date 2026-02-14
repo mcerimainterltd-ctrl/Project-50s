@@ -294,8 +294,6 @@ async function generateUniqueXameId() {
 function getPrivacyFilteredContactData(user) {
     return {
         xameId:        user.xameId,
-        firstName:     user.firstName,
-        lastName:      user.lastName,
         preferredName: user.hidePreferredName  ? '' : user.preferredName,
         profilePic:    user.hideProfilePicture ? '' : user.profilePic
     };
