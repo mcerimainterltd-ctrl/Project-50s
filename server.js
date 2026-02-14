@@ -74,6 +74,23 @@ if (!process.env.CLOUDINARY_CLOUD_NAME ||
 }
 
 // ============================================================
+// WEB PUSH CONFIGURATION
+// ============================================================
+
+const webpush = require('web-push');
+
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+    webpush.setVapidDetails(
+        process.env.VAPID_EMAIL,
+        process.env.VAPID_PUBLIC_KEY,
+        process.env.VAPID_PRIVATE_KEY
+    );
+    console.log('✅ Web Push configured');
+} else {
+    console.warn('⚠️ VAPID keys missing — push notifications disabled');
+}
+
+// ============================================================
 // CLOUDINARY UPLOAD HELPER
 // ============================================================
 
@@ -208,6 +225,14 @@ const messageSchema = new mongoose.Schema({
     }
 });
 
+const pushSubscriptionSchema = new mongoose.Schema({
+    userId: { type: String, required: true, unique: true },
+    subscription: { type: Object, required: true },
+    createdAt: { type: Date, default: Date.now }
+});
+
+const PushSubscription = mongoose.model('PushSubscription', pushSubscriptionSchema);
+
 const callHistorySchema = new mongoose.Schema({
     callId:      { type: String, required: true, unique: true },
     callerId:    { type: String, required: true, index: true },
@@ -225,6 +250,13 @@ const callHistorySchema = new mongoose.Schema({
 const User        = mongoose.model('User', userSchema);
 const Message     = mongoose.model('Message', messageSchema);
 const CallHistory = mongoose.model('CallHistory', callHistorySchema);
+
+const pushSubscriptionSchema = new mongoose.Schema({
+    userId: { type: String, required: true, unique: true },
+    subscription: { type: Object, required: true },
+    createdAt: { type: Date, default: Date.now }
+});
+
 
 // ============================================================
 // FILE UPLOAD CONFIGURATION
@@ -254,6 +286,7 @@ async function createDirectories() {
 // Serve static files
 app.use(express.static(BASE_DIR));
 app.use('/uploads', express.static(uploadDir));
+app.use('/media/icons', express.static(path.join(BASE_DIR, 'media', 'icons')));
 // /media/profile_pics no longer needed for new uploads
 // kept for backwards compatibility with any old local URLs still in DB
 app.use('/media/profile_pics', express.static(profilePicsDir));
@@ -579,6 +612,28 @@ app.post('/api/logout', async (req, res) => {
 
     io.emit('online_users', Array.from(onlineUsers));
     res.json({ success: true, message: 'Logged out successfully.' });
+});
+
+// --- SAVE PUSH SUBSCRIPTION ---
+app.post('/api/save-push-subscription', async (req, res) => {
+    const { userId, subscription } = req.body;
+
+    if (!userId || !subscription) {
+        return res.status(400).json({ success: false, message: 'Missing data.' });
+    }
+
+    try {
+        await PushSubscription.findOneAndUpdate(
+            { userId },
+            { userId, subscription },
+            { upsert: true, new: true }
+        );
+        console.log(`✅ Push subscription saved for: ${userId}`);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Push subscription save error:', error);
+        res.status(500).json({ success: false, message: 'Server error.' });
+    }
 });
 
 // --- GET USER NAME ---
@@ -914,6 +969,8 @@ app.post('/api/delete-chat-and-contact',
     }
 );
 
+
+
 // ============================================================
 // SOCKET.IO HANDLERS
 // ============================================================
@@ -1226,21 +1283,39 @@ io.on('connection', (socket) => {
                 const incomingCallName = getContactDisplayName(
                     callerId, filteredCaller, savedContact
                 );
-
-                io.to(recipientSocketId).emit('call-user', {
+         io.to(recipientSocketId).emit('call-user', {
                     offer,
                     callerId,
                     caller: {
-                        xameId:       filteredCaller.xameId,
-                        firstName:    filteredCaller.firstName,
-                        lastName:     filteredCaller.lastName,
+                        xameId:        filteredCaller.xameId,
                         preferredName: filteredCaller.preferredName,
-                        profilePic:   filteredCaller.profilePic,
-                        displayName:  incomingCallName
+                        profilePic:    filteredCaller.profilePic,
+                        displayName:   incomingCallName
                     },
                     callType,
                     callId
                 });
+
+                // Send push notification for incoming call
+                try {
+                    const pushSub = await PushSubscription.findOne({ userId: recipientId });
+                    if (pushSub) {
+                        await webpush.sendNotification(
+                            pushSub.subscription,
+                            JSON.stringify({
+                                type: 'incoming-call',
+                                callerId,
+                                callerName: incomingCallName,
+                                callType,
+                                callId
+                            })
+                        );
+                        console.log(`✅ Push notification sent to: ${recipientId}`);
+                    }
+                } catch (pushError) {
+                    console.error('Push notification error:', pushError);
+                }
+
             } catch (error) {
                 console.error('Call user error:', error);
                 socket.emit('call-error', { message: 'Failed to initiate call.' });
