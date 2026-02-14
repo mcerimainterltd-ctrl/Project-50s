@@ -225,12 +225,6 @@ const messageSchema = new mongoose.Schema({
     }
 });
 
-const pushSubscriptionSchema = new mongoose.Schema({
-    userId: { type: String, required: true, unique: true },
-    subscription: { type: Object, required: true },
-    createdAt: { type: Date, default: Date.now }
-});
-
 const PushSubscription = mongoose.model('PushSubscription', pushSubscriptionSchema);
 
 const callHistorySchema = new mongoose.Schema({
