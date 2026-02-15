@@ -225,8 +225,6 @@ const messageSchema = new mongoose.Schema({
     }
 });
 
-const PushSubscription = mongoose.model('PushSubscription', pushSubscriptionSchema);
-
 const callHistorySchema = new mongoose.Schema({
     callId:      { type: String, required: true, unique: true },
     callerId:    { type: String, required: true, index: true },
@@ -251,6 +249,7 @@ const pushSubscriptionSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 });
 
+const PushSubscription = mongoose.model('PushSubscription', pushSubscriptionSchema);
 
 // ============================================================
 // FILE UPLOAD CONFIGURATION
