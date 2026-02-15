@@ -1,4 +1,4 @@
-const CACHE_NAME = "xamepage-v2.1-PROD";
+CACHE_NAME = "xamepage-v2.1-PROD";
 
 const ASSETS = [
   "./",
@@ -6,10 +6,8 @@ const ASSETS = [
   "style.css",
   "script.js",
   "manifest.json",
-
   "xamepage_icon.png",
   "xamepage_splash.png",
-
   "xamepage_call.mp3",
   "xamepage_outgoing.mp3",
   "xamepage_message.mp3"
@@ -63,4 +61,58 @@ self.addEventListener("fetch", event => {
       });
     })
   );
+});
+
+// ===== PUSH NOTIFICATION HANDLER =====
+self.addEventListener('push', (e) => {
+    if (!e.data) return;
+
+    const data = e.data.json();
+
+    if (data.type === 'incoming-call') {
+        e.waitUntil(
+            self.registration.showNotification(`Incoming ${data.callType} call`, {
+                body: `${data.callerName || data.callerId} is calling you`,
+                icon: '/media/icons/icon-192.png',
+                badge: '/media/icons/icon-96.png',
+                tag: 'incoming-call',
+                renotify: true,
+                requireInteraction: true,
+                vibrate: [500, 200, 500],
+                data: {
+                    callerId: data.callerId,
+                    callId: data.callId,
+                    callType: data.callType,
+                    url: '/'
+                },
+                actions: [
+                    { action: 'accept', title: '✅ Accept' },
+                    { action: 'decline', title: '❌ Decline' }
+                ]
+            })
+        );
+    }
+});
+
+// ===== NOTIFICATION CLICK HANDLER =====
+self.addEventListener('notificationclick', (e) => {
+    e.notification.close();
+
+    if (e.action === 'decline') {
+        fetch('/api/decline-call', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ callId: e.notification.data.callId })
+        }).catch(console.error);
+        return;
+    }
+
+    e.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+            if (clientList.length > 0) {
+                return clientList[0].focus();
+            }
+            return clients.openWindow(e.notification.data.url || '/');
+        })
+    );
 });
